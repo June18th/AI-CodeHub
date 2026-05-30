@@ -1,0 +1,74 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ai-codehub
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:aicodehub}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${DB_USER:aicodehub}
+    password: ${DB_PASSWORD:aicodehub123}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis123}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+ai:
+  models:
+    gpt:
+      api-key: ${AI_GPT_API_KEY:}
+      base-url: ${AI_GPT_BASE_URL:https://api.openai.com/v1}
+      model: ${AI_GPT_MODEL:gpt-3.5-turbo}
+    zhipu:
+      api-key: ${AI_ZHIPU_API_KEY:}
+      base-url: ${AI_ZHIPU_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+      model: ${AI_ZHIPU_MODEL:glm-4-flash}
+    qwen:
+      api-key: ${AI_QWEN_API_KEY:}
+      base-url: ${AI_QWEN_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      model: ${AI_QWEN_MODEL:qwen-turbo}
+    deepseek:
+      api-key: ${AI_DEEPSEEK_API_KEY:}
+      base-url: ${AI_DEEPSEEK_BASE_URL:https://api.deepseek.com/v1}
+      model: ${AI_DEEPSEEK_MODEL:deepseek-chat}
+    openai:
+      api-key: ${AI_OPENAI_API_KEY:}
+      base-url: ${AI_OPENAI_BASE_URL:https://api.openai.com/v1}
+      model: ${AI_OPENAI_MODEL:gpt-3.5-turbo}
+
+logging:
+  level:
+    com.aicodehub: debug
+    root: info
+
+jwt:
+  secret: ${JWT_SECRET:ai-codehub-2026-jwt-secret-key-min-256-bits!!}
+  expiration: 86400000
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:mysql://mysql:3306/${DB_NAME:aicodehub}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
