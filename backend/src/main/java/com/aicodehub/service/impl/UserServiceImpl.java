@@ -35,7 +35,8 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("账号未激活，请等待管理员审核");
         }
         String token = jwtUtil.generate(user.getId(), user.getRole());
-        return Map.of("token", token, "role", user.getRole(), "username", user.getUsername());
+        return Map.of("token", token, "role", user.getRole(), "username", user.getUsername(),
+            "avatar", user.getAvatar() != null ? user.getAvatar() : "");
     }
 
     @Override
@@ -50,7 +51,7 @@ public class UserServiceImpl implements UserService {
         user.setUsername(req.getUsername());
         user.setEmail(req.getEmail());
         user.setPassword(encoder.encode(req.getPassword()));
-        user.setRole("applicant");
+        user.setRole("user");
         user.setStatus("pending");
         user.setApplyReason(req.getApplyReason());
         userMapper.insert(user);
@@ -60,8 +61,8 @@ public class UserServiceImpl implements UserService {
     public Page<User> listApplications(int page, int size) {
         return userMapper.selectPage(new Page<>(page, size),
             new LambdaQueryWrapper<User>()
-                .eq(User::getStatus, "pending")
-                .orderByAsc(User::getCreatedAt));
+                .ne(User::getRole, "admin")
+                .orderByDesc(User::getCreatedAt));
     }
 
     @Override
@@ -72,8 +73,8 @@ public class UserServiceImpl implements UserService {
         }
         if ("approve".equals(req.getAction())) {
             String role = req.getRole() != null ? req.getRole() : "user";
-            if (!"user".equals(role) && !"beta".equals(role)) {
-                throw new IllegalArgumentException("角色只能为 user 或 beta");
+            if (!"user".equals(role) && !"test".equals(role)) {
+                throw new IllegalArgumentException("角色只能为 user 或 test");
             }
             user.setRole(role);
             user.setStatus("active");

@@ -2,7 +2,7 @@ package com.aicodehub.controller;
 
 import com.aicodehub.common.Result;
 import com.aicodehub.common.UserContext;
-import com.aicodehub.common.annotations.RequireRole;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.aicodehub.service.ConversationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -12,7 +12,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/conversations")
 @RequiredArgsConstructor
-@RequireRole({"user", "beta", "admin"})
+@PreAuthorize("hasAnyRole('USER','TEST','ADMIN')")
 public class ConversationController {
 
     private final ConversationService conversationService;

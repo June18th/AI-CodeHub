@@ -19,6 +19,10 @@ public class ConversationService {
 
     private static final int MAX_CONTEXT = 20;
 
+    public Conversation getById(Long id) {
+        return conversationMapper.selectById(id);
+    }
+
     public Conversation create(Long userId, String model, String firstPrompt) {
         Conversation c = new Conversation();
         c.setUserId(userId);
@@ -45,10 +49,16 @@ public class ConversationService {
     }
 
     public void saveMessage(Long conversationId, String role, String content) {
+        saveMessage(conversationId, role, content, null, null);
+    }
+
+    public void saveMessage(Long conversationId, String role, String content, Integer inputTokens, Integer outputTokens) {
         Message m = new Message();
         m.setConversationId(conversationId);
         m.setRole(role);
         m.setContent(content);
+        m.setInputTokens(inputTokens);
+        m.setOutputTokens(outputTokens);
         messageMapper.insert(m);
     }
 

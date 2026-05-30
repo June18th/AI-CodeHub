@@ -2,7 +2,7 @@ package com.aicodehub.controller;
 
 import com.aicodehub.common.Result;
 import com.aicodehub.common.UserContext;
-import com.aicodehub.common.annotations.RequireRole;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.aicodehub.common.dto.ReviewRequest;
 import com.aicodehub.service.UserService;
 import jakarta.validation.Valid;
@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
-@RequireRole("admin")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
 
     private final UserService userService;

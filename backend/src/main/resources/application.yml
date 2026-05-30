@@ -20,6 +20,15 @@ spring:
           max-active: 8
           max-idle: 8
           min-idle: 0
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKER:kafka:9092}
+    consumer:
+      auto-offset-reset: earliest
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

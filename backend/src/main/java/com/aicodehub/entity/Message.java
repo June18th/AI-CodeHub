@@ -12,6 +12,8 @@ public class Message {
     private Long conversationId;
     private String role;   // user / assistant
     private String content;
+    private Integer inputTokens;
+    private Integer outputTokens;
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime createdAt;
 }

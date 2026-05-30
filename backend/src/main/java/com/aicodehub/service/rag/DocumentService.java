@@ -1,17 +1,14 @@
 package com.aicodehub.service.rag;
 
 import com.aicodehub.entity.Document;
-import com.aicodehub.entity.DocumentChunk;
-import com.aicodehub.mapper.DocumentChunkMapper;
 import com.aicodehub.mapper.DocumentMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -20,11 +17,15 @@ import java.util.stream.Collectors;
 public class DocumentService {
 
     private final DocumentMapper documentMapper;
-    private final DocumentChunkMapper chunkMapper;
+    private final VectorStoreService vectorStore;
 
     private static final int CHUNK_SIZE = 500;
 
-    @Transactional
+    @PostConstruct
+    public void init() {
+        vectorStore.ensureIndex();
+    }
+
     public Document upload(Long userId, String filename, String fileType, String content) {
         Document doc = new Document();
         doc.setUserId(userId);
@@ -35,16 +36,12 @@ public class DocumentService {
 
         List<String> chunks = splitChunks(content, CHUNK_SIZE);
         for (int i = 0; i < chunks.size(); i++) {
-            DocumentChunk c = new DocumentChunk();
-            c.setDocumentId(doc.getId());
-            c.setChunkIndex(i);
-            c.setContent(chunks.get(i));
-            chunkMapper.insert(c);
+            vectorStore.indexChunk(doc.getId(), i, chunks.get(i), filename, userId);
         }
 
         doc.setStatus("ready");
         documentMapper.updateById(doc);
-        log.info("Document {} uploaded: {} chunks", doc.getId(), chunks.size());
+        log.info("Document {} uploaded: {} chunks indexed to ES", doc.getId(), chunks.size());
         return doc;
     }
 
@@ -57,44 +54,23 @@ public class DocumentService {
     public void delete(Long docId, Long userId) {
         Document doc = documentMapper.selectById(docId);
         if (doc != null && doc.getUserId().equals(userId)) {
-            chunkMapper.delete(new LambdaQueryWrapper<DocumentChunk>()
-                .eq(DocumentChunk::getDocumentId, docId));
+            vectorStore.deleteDoc(docId);
             documentMapper.deleteById(docId);
         }
     }
 
-    /**
-     * Retrieve top-K relevant chunks across all user docs.
-     * Falls back to LIKE search if fulltext index not available.
-     */
+    /** Vector search via ES */
     public List<String> retrieve(Long userId, String query, int topK) {
-        List<Document> docs = documentMapper.selectList(new LambdaQueryWrapper<Document>()
-            .eq(Document::getUserId, userId).eq(Document::getStatus, "ready"));
-        if (docs.isEmpty()) return List.of();
+        List<Map<String, Object>> hits = vectorStore.search(userId, query, topK);
+        if (hits.isEmpty()) return List.of("未找到相关内容");
 
-        List<String> results = new ArrayList<>();
-        for (Document doc : docs) {
-            try {
-                List<DocumentChunk> chunks = chunkMapper.searchByFulltext(doc.getId(), query, 3);
-                if (chunks.isEmpty()) {
-                    chunks = chunkMapper.searchByLike(doc.getId(), query, 3);
-                }
-                for (DocumentChunk c : chunks) {
-                    String snippet = c.getContent();
-                    if (snippet.length() > 300) snippet = snippet.substring(0, 300) + "...";
-                    results.add("[" + doc.getFilename() + "] " + snippet);
-                }
-            } catch (Exception e) {
-                // Fulltext may not be supported, fallback to LIKE
-                List<DocumentChunk> chunks = chunkMapper.searchByLike(doc.getId(), query, 3);
-                for (DocumentChunk c : chunks) {
-                    String snippet = c.getContent();
-                    if (snippet.length() > 300) snippet = snippet.substring(0, 300) + "...";
-                    results.add("[" + doc.getFilename() + "] " + snippet);
-                }
-            }
-        }
-        return results.stream().limit(topK).collect(Collectors.toList());
+        return hits.stream().map(h -> {
+            String filename = (String) h.get("filename");
+            String content = (String) h.get("content");
+            double score = (double) h.get("score");
+            String snippet = content.length() > 300 ? content.substring(0, 300) + "..." : content;
+            return String.format("[%s] (相似度 %.2f) %s", filename, score, snippet);
+        }).collect(Collectors.toList());
     }
 
     private List<String> splitChunks(String text, int size) {

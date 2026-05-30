@@ -10,5 +10,5 @@ public class ReviewRequest {
     private Long userId;
     @NotBlank
     private String action;  // approve / reject
-    private String role;    // user / beta (approve 时指定)
+    private String role;    // user / test
 }

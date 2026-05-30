@@ -121,6 +121,8 @@ public class FunctionCallHandler {
                         } else {
                             result = "未知工具: " + toolName;
                         }
+                        // Also send tool result to client (in code block to avoid markdown rendering)
+                        onChunk.accept("\n📋 工具结果:\n```\n" + result + "\n```\n");
 
                         // Add tool result
                         Map<String, Object> toolMsg = new LinkedHashMap<>();
@@ -148,6 +150,7 @@ public class FunctionCallHandler {
                     HttpResponse<java.io.InputStream> streamResp = client.send(request2,
                         HttpResponse.BodyHandlers.ofInputStream());
 
+                    int inputTokens = 0, outputTokens = 0;
                     try (java.io.BufferedReader reader = new java.io.BufferedReader(
                             new java.io.InputStreamReader(streamResp.body()))) {
                         String line;
@@ -157,12 +160,18 @@ public class FunctionCallHandler {
                                 if ("[DONE]".equals(data)) break;
                                 try {
                                     JsonNode node = objectMapper.readTree(data);
+                                    JsonNode usage = node.get("usage");
+                                    if (usage != null) {
+                                        if (usage.has("prompt_tokens")) inputTokens = usage.get("prompt_tokens").asInt();
+                                        if (usage.has("completion_tokens")) outputTokens = usage.get("completion_tokens").asInt();
+                                    }
                                     JsonNode ch = node.get("choices");
                                     if (ch != null && !ch.isEmpty()) {
                                         JsonNode delta = ch.get(0).get("delta");
                                         if (delta != null) {
                                             JsonNode content = delta.get("content");
                                             if (content != null && !content.asText().isEmpty()) {
+                                                outputTokens++;
                                                 onChunk.accept(content.asText());
                                             }
                                         }
@@ -171,12 +180,17 @@ public class FunctionCallHandler {
                             }
                         }
                     }
+                    if (inputTokens > 0 || outputTokens > 0) {
+                        onChunk.accept("[TOKEN]input=" + inputTokens + ",output=" + outputTokens);
+                    }
                 } else {
                     // ---- No tool call: stream the content from this response ----
-                    String content = message.has("content") && !message.get("content").isNull()
-                        ? message.get("content").asText() : "";
-                    if (!content.isEmpty()) {
-                        onChunk.accept(content);
+                    int inputTokens = 0, outputTokens = 0;
+                    // Get usage from the non-streaming response
+                    JsonNode rootUsage = root.get("usage");
+                    if (rootUsage != null) {
+                        if (rootUsage.has("prompt_tokens")) inputTokens = rootUsage.get("prompt_tokens").asInt();
+                        if (rootUsage.has("completion_tokens")) outputTokens = rootUsage.get("completion_tokens").asInt();
                     }
                     // Also make a streaming call for consistency
                     Map<String, Object> body2 = new LinkedHashMap<>();
@@ -202,6 +216,11 @@ public class FunctionCallHandler {
                                 if ("[DONE]".equals(data)) break;
                                 try {
                                     JsonNode node = objectMapper.readTree(data);
+                                    JsonNode usage = node.get("usage");
+                                    if (usage != null) {
+                                        if (usage.has("prompt_tokens")) inputTokens = usage.get("prompt_tokens").asInt();
+                                        if (usage.has("completion_tokens")) outputTokens = usage.get("completion_tokens").asInt();
+                                    }
                                     JsonNode ch = node.get("choices");
                                     if (ch != null && !ch.isEmpty()) {
                                         JsonNode delta = ch.get(0).get("delta");
@@ -215,6 +234,9 @@ public class FunctionCallHandler {
                                 } catch (Exception ignored) {}
                             }
                         }
+                    }
+                    if (inputTokens > 0 || outputTokens > 0) {
+                        onChunk.accept("[TOKEN]input=" + inputTokens + ",output=" + outputTokens);
                     }
                 }
                 onDone.run();
