@@ -1,6 +1,7 @@
 package com.aicodehub.config;
 
 import com.aicodehub.common.JwtUtil;
+import com.aicodehub.common.UserContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -54,6 +55,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         List<SimpleGrantedAuthority> authorities = List.of(
             new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
         );
+
+        UserContext.set(userId, role);
 
         UsernamePasswordAuthenticationToken authentication =
             new UsernamePasswordAuthenticationToken(userId, null, authorities);

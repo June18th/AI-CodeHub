@@ -25,4 +25,9 @@ public class AuthController {
         userService.register(req);
         return Result.ok("申请已提交，请等待管理员审核");
     }
+
+    @PostMapping("/refresh")
+    public Result<?> refresh(@RequestBody java.util.Map<String, String> body) {
+        return Result.ok(userService.refreshAccessToken(body.get("refreshToken")));
+    }
 }

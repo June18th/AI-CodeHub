@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useChatStream } from '../hooks/useChatStream';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore, apiFetch } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import LoginModal from '../components/LoginModal';
 import Sidebar from '../components/Sidebar';
@@ -25,7 +26,9 @@ function applyInline(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-slate-900 dark:text-white">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code class="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md text-[0.9em] font-mono text-rose-600 dark:text-rose-400">$1</code>');
+    .replace(/`(.+?)`/g, '$1')
+    // Remove ALL remaining backtick characters
+    .replace(/`/g, '');
 }
 
 function renderMarkdown(text: string) {
@@ -50,29 +53,33 @@ function renderMarkdown(text: string) {
     if (tableRows.length < 2) { tableRows = []; return; }
     const header = tableRows[0];
     const body = tableRows.filter((_,i) => i !== 1); // skip separator row
-    result.push(React.createElement('table', {
-      key: 'tbl-' + result.length,
-      className: 'my-3 w-full text-sm border-collapse',
-    }, [
-      React.createElement('thead', { key: 'th' },
-        React.createElement('tr', {},
-          header.map((c, j) => React.createElement('th', {
-            key: j,
-            className: 'border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-left font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200',
-            dangerouslySetInnerHTML: { __html: c },
-          }))
-        )
-      ),
-      React.createElement('tbody', { key: 'tb' },
-        body.map((row, ri) => React.createElement('tr', { key: ri },
-          row.map((c, cj) => React.createElement('td', {
-            key: cj,
-            className: 'border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-slate-700 dark:text-slate-300',
-            dangerouslySetInnerHTML: { __html: c },
-          }))
-        ))
-      ),
-    ]));
+    result.push(React.createElement('div', { key: 'tbl-' + result.length, className: 'my-4 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700' },
+      React.createElement('table', {
+        className: 'w-full text-sm',
+      }, [
+        React.createElement('thead', { key: 'th' },
+          React.createElement('tr', { className: 'bg-slate-50 dark:bg-slate-800/60' },
+            header.map((c, j) => React.createElement('th', {
+              key: j,
+              className: 'px-4 py-2.5 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700',
+              dangerouslySetInnerHTML: { __html: c },
+            }))
+          )
+        ),
+        React.createElement('tbody', { key: 'tb' },
+          body.map((row, ri) => React.createElement('tr', {
+            key: ri,
+            className: ri % 2 === 0 ? 'bg-white dark:bg-slate-900/60' : 'bg-slate-50/50 dark:bg-slate-800/30',
+          },
+            row.map((c, cj) => React.createElement('td', {
+              key: cj,
+              className: 'px-4 py-2.5 text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-700/50',
+              dangerouslySetInnerHTML: { __html: c },
+            }))
+          ))
+        ),
+      ])
+    ));
     tableRows = [];
   };
 
@@ -169,10 +176,10 @@ export default function ChatInterface() {
   const [model, setModel] = useState('deepseek');
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [conversationId, setConversationId] = useState<number | null>(() => {
-    const s = localStorage.getItem('aicodehub-active-conv');
-    return s ? Number(s) : null;
-  });
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [conversationSlug, setConversationSlug] = useState<string | null>(id || null);
   const [modalOpen, setModalOpen] = useState(false);
   const [agentMode, setAgentMode] = useState(false);
   const [clock, setClock] = useState(fmtClock);
@@ -186,9 +193,19 @@ export default function ChatInterface() {
   useEffect(() => { (window as any).__openLoginModal = () => setModalOpen(true); return () => { delete (window as any).__openLoginModal; }; }, []);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages]);
 
+  // Resolve slug to conversation ID
+  useEffect(() => {
+    if (!token || !conversationSlug) return;
+    apiFetch('/api/v1/conversations', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => {
+        const conv = (d.data ?? []).find((c: { slug: string }) => c.slug === conversationSlug);
+        if (conv) { setConversationId(conv.id); setConversationSlug(null); }
+      });
+  }, [token, conversationSlug]);
+
   useEffect(() => {
     if (!token || !conversationId) return;
-    fetch(`/api/v1/conversations/${conversationId}/messages`, { headers: { Authorization: `Bearer ${token}` } })
+    apiFetch(`/api/v1/conversations/${conversationId}/messages`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json()).then((d) => {
         const msgs = (d.data ?? []).map((m: { id: number; role: string; content: string; createdAt: string; inputTokens?: number; outputTokens?: number }) => ({
           id: String(m.id), role: m.role as 'user' | 'assistant', content: m.content, model,
@@ -198,7 +215,7 @@ export default function ChatInterface() {
       });
   }, [token, conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const newConversation = useCallback(() => { setMessages([]); setConversationId(null); localStorage.removeItem('aicodehub-active-conv'); }, []);
+  const newConversation = useCallback(() => { setMessages([]); setConversationId(null); setConversationSlug(null); navigate('/chat', { replace: true }); }, [navigate]);
 
   const sendWithConvId = (text: string, cid: number) => {
     const now = Date.now();
@@ -236,9 +253,9 @@ export default function ChatInterface() {
   const handleSendOrCreate = async () => {
     const text = input.trim(); if (!text || streaming) return;
     if (isLoggedIn && !conversationId) {
-      const res = await fetch('/api/v1/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token!}` }, body: JSON.stringify({ model, title: text }) });
+      const res = await apiFetch('/api/v1/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token!}` }, body: JSON.stringify({ model, title: text }) });
       const data = await res.json();
-      if (data.code === 200 && data.data?.id) { setConversationId(data.data.id); sendWithConvId(text, data.data.id); return; }
+      if (data.code === 200 && data.data?.id) { setConversationId(data.data.id); navigate('/chat/'+data.data.slug, { replace: true }); sendWithConvId(text, data.data.id); return; }
     }
     sendMessage(text, agentMode);
   };
@@ -258,7 +275,7 @@ export default function ChatInterface() {
       </div>
 
       {/* === sidebar === */}
-      <Sidebar token={token} activeId={conversationId} onSelect={(id) => { setConversationId(id); }} onNew={newConversation} />
+      <Sidebar token={token} activeId={conversationId} onSelect={(id, slug) => { setConversationId(id); navigate('/chat/'+slug, { replace: true }); }} onNew={newConversation} />
 
       {/* === body === */}
       <main className="flex-1 flex flex-col min-w-0">
@@ -268,7 +285,7 @@ export default function ChatInterface() {
             {/* left */}
             <div className="flex items-center gap-3.5 min-w-0 shrink-0">
               <LogoIcon size={36} />
-              <span className="text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight">AI-CodeHub</span>
+              <a href="/chat" className="text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight hover:opacity-80 transition-opacity">AI-CodeHub</a>
               <span className="hidden md:block text-[13px] text-slate-400 dark:text-slate-500 ml-3 pl-3 border-l border-slate-200 dark:border-slate-700">
                 多模型对话 · Agent · RAG
               </span>

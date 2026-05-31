@@ -5,6 +5,7 @@ import ProfileModal from './ProfileModal';
 
 interface Conversation {
   id: number;
+  slug: string;
   title: string;
   model: string;
   updatedAt?: string;
@@ -13,7 +14,7 @@ interface Conversation {
 interface Props {
   token: string | null;
   activeId: number | null;
-  onSelect: (id: number) => void;
+  onSelect: (id: number, slug: string) => void;
   onNew: () => void;
 }
 
@@ -96,7 +97,7 @@ export default function Sidebar({ token, activeId, onSelect, onNew }: Props) {
             list.map((c) => (
               <div
                 key={c.id}
-                onClick={() => onSelect(c.id)}
+                onClick={() => onSelect(c.id, c.slug)}
                 className={`group flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-colors text-sm ${
                   c.id === activeId
                     ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-medium'

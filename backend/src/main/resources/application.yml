@@ -1,5 +1,12 @@
 server:
   port: 8080
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+    accept-count: 100
+    max-connections: 10000
+    connection-timeout: 30000
 
 spring:
   application:
@@ -9,6 +16,13 @@ spring:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:aicodehub}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
     username: ${DB_USER:aicodehub}
     password: ${DB_PASSWORD:aicodehub123}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 600000
+      leak-detection-threshold: 60000
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -17,9 +31,16 @@ spring:
       timeout: 3000ms
       lettuce:
         pool:
-          max-active: 8
+          max-active: 16
           max-idle: 8
-          min-idle: 0
+          min-idle: 4
+          max-wait: 3000ms
+          time-between-eviction-runs: 60s
+  cache:
+    type: redis
+    redis:
+      time-to-live: 10m
+      cache-null-values: false
   kafka:
     bootstrap-servers: ${KAFKA_BROKER:kafka:9092}
     consumer:
@@ -29,6 +50,9 @@ spring:
         spring.json.trusted.packages: "*"
     producer:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+mcp:
+  command: ${MCP_COMMAND:}
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
@@ -40,7 +64,7 @@ mybatis-plus:
       logic-not-delete-value: 0
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 ai:
   models:
@@ -69,10 +93,55 @@ logging:
   level:
     com.aicodehub: debug
     root: info
+    org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration: error
 
 jwt:
   secret: ${JWT_SECRET:ai-codehub-2026-jwt-secret-key-min-256-bits!!}
-  expiration: 86400000
+  expiration: 900000
+  refresh-expiration: 604800000
+
+# ---- Management & Observability ----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ai-codehub
+
+# ---- Rate Limiting (Bucket4j) ----
+rate-limit:
+  enabled: true
+  default-rpm: 60
+  chat-rpm: 20
+  agent-rpm: 20
+  admin-rpm: 120
+
+# ---- Circuit Breaker (Resilience4j) ----
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+    instances:
+      ai-model-call:
+        base-config: default
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 60s
 
 ---
 spring:

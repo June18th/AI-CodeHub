@@ -34,8 +34,12 @@ public class UserServiceImpl implements UserService {
         if (!"active".equals(user.getStatus())) {
             throw new IllegalArgumentException("账号未激活，请等待管理员审核");
         }
-        String token = jwtUtil.generate(user.getId(), user.getRole());
-        return Map.of("token", token, "role", user.getRole(), "username", user.getUsername(),
+        String accessToken = jwtUtil.generate(user.getId(), user.getRole());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getRole());
+        user.setRefreshToken(encoder.encode(refreshToken));
+        userMapper.updateById(user);
+        return Map.of("token", accessToken, "refreshToken", refreshToken,
+            "role", user.getRole(), "username", user.getUsername(),
             "avatar", user.getAvatar() != null ? user.getAvatar() : "");
     }
 
@@ -84,5 +88,26 @@ public class UserServiceImpl implements UserService {
         user.setReviewedBy(reviewerId);
         user.setReviewedAt(LocalDateTime.now());
         userMapper.updateById(user);
+    }
+
+    @Override
+    public Map<String, String> refreshAccessToken(String rawRefreshToken) {
+        if (!jwtUtil.validate(rawRefreshToken)) {
+            throw new IllegalArgumentException("刷新令牌无效或已过期");
+        }
+        if (jwtUtil.isAccessToken(rawRefreshToken)) {
+            throw new IllegalArgumentException("请使用刷新令牌而非访问令牌");
+        }
+        Long userId = jwtUtil.getUserId(rawRefreshToken);
+        String role = jwtUtil.getRole(rawRefreshToken);
+        User user = userMapper.selectById(userId);
+        if (user == null || user.getRefreshToken() == null) {
+            throw new IllegalArgumentException("用户不存在或未登录");
+        }
+        if (!encoder.matches(rawRefreshToken, user.getRefreshToken())) {
+            throw new IllegalArgumentException("刷新令牌验证失败");
+        }
+        String newAccess = jwtUtil.generate(userId, role);
+        return Map.of("token", newAccess, "role", role);
     }
 }

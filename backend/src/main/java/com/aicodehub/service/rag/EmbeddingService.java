@@ -38,10 +38,19 @@ public class EmbeddingService {
      * Embed a single text, returns float array.
      */
     public float[] embed(String text) {
+        float[][] batch = embedBatch(List.of(text));
+        return (batch != null && batch.length > 0) ? batch[0] : null;
+    }
+
+    /**
+     * Batch embed multiple texts in a single API call.
+     */
+    public float[][] embedBatch(List<String> texts) {
+        if (texts.isEmpty()) return new float[0][];
         try {
             String body = mapper.writeValueAsString(Map.of(
                 "model", model,
-                "input", Map.of("texts", List.of(text)),
+                "input", Map.of("texts", texts),
                 "parameters", Map.of("text_type", "document")
             ));
 
@@ -49,7 +58,7 @@ public class EmbeddingService {
                 .uri(URI.create("https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding"))
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofSeconds(60))
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
@@ -61,14 +70,18 @@ public class EmbeddingService {
 
             JsonNode root = mapper.readTree(resp.body());
             JsonNode embeddings = root.path("output").path("embeddings");
-            if (!embeddings.isArray() || embeddings.isEmpty()) return null;
+            if (!embeddings.isArray()) return null;
 
-            JsonNode vec = embeddings.get(0).path("embedding");
-            float[] result = new float[vec.size()];
-            for (int i = 0; i < vec.size(); i++) result[i] = vec.get(i).floatValue();
-            return result;
+            float[][] results = new float[embeddings.size()][];
+            for (int j = 0; j < embeddings.size(); j++) {
+                JsonNode vec = embeddings.get(j).path("embedding");
+                float[] result = new float[vec.size()];
+                for (int i = 0; i < vec.size(); i++) result[i] = vec.get(i).floatValue();
+                results[j] = result;
+            }
+            return results;
         } catch (Exception e) {
-            log.error("Embedding failed: {}", e.getMessage());
+            log.error("Batch embedding failed: {}", e.getMessage());
             return null;
         }
     }

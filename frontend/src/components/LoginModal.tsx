@@ -44,7 +44,7 @@ export default function LoginModal({ open, onClose }: Props) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message ?? '登录失败');
-        login(data.data.token, data.data.role, data.data.username, data.data.avatar);
+        login(data.data.token, data.data.refreshToken, data.data.role, data.data.username, data.data.avatar);
         onClose();
         reset();
       } else {

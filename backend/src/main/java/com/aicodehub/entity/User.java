@@ -13,6 +13,7 @@ public class User {
     private String email;
     private String password;
     private String avatar;
+    private String refreshToken;
     private String role;    // admin / beta / user / applicant
     private String status;  // pending / active / rejected
     private String applyReason;

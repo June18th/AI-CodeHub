@@ -13,10 +13,15 @@ import java.util.Map;
 public class AuditService {
 
     private final AuditLogMapper mapper;
+    private final com.aicodehub.mapper.UserMapper userMapper;
 
     public void log(Long userId, String username, String model, String endpoint,
                     int inputTokens, int outputTokens, int latencyMs,
                     String status, String errorMsg) {
+        if (username == null && userId != null) {
+            var user = userMapper.selectById(userId);
+            username = user != null ? user.getUsername() : null;
+        }
         AuditLog log = new AuditLog();
         log.setUserId(userId);
         log.setUsername(username);

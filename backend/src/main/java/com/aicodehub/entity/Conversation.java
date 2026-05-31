@@ -12,6 +12,7 @@ public class Conversation {
     private Long userId;
     private String title;
     private String model;
+    private String slug;
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime createdAt;
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)

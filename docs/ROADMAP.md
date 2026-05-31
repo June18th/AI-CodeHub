@@ -21,21 +21,25 @@
 
 ## ⚡ 性能优化
 
-- **Redis 缓存** — 模型配置 / 对话历史 / 用户信息热数据缓存，TTL 策略
-- **ES 查询优化** — kNN + BM25 混合检索召回率调优，索引分片策略
-- **Kafka 批量消费** — 文档向量化改为批量 Embedding API 调用，减少 API 费用
-- **Nginx 静态资源** — CDN 加速，Vite 构建产物 hash 化
-- **数据库索引** — 慢查询分析，添加复合索引
+- [x] ~~HikariCP 连接池调优（max 20 / min-idle 5 / 泄漏检测）~~ → 已完成
+- [x] ~~Tomcat 线程池调优（max 200 / min-spare 10 / accept 100）~~ → 已完成
+- [x] ~~Lettuce Redis 连接池增强（max-active 16 / min-idle 4）~~ → 已完成
+- [x] ~~JVM 调优 + Nginx 限流 + 安全头~~ → 已完成
+- [x] ~~Redis 缓存（Conversation / ModelConfig 热点查询 @Cacheable）~~ → 已完成
+- [x] ~~ES 查询优化（kNN+BM25 混合检索 RRF + 批量 Embedding + Bulk ES）~~ → 已完成
+- [x] ~~Kafka 移除（文档处理改为同步批量 Embedding + Bulk ES）~~ → 已完成
+- [x] ~~数据库索引（9 个复合索引，覆盖所有高频查询 + 排序字段）~~ → 已完成
+- [x] ~~缓存一致性（CacheConsistencyService 重试+定时修复）~~ → 已完成
 
 ---
 
 ## 🔐 安全加固
 
-- **API 限流** — Bucket4j 或 Spring Cloud Gateway RateLimiter
-- **Token 刷新** — Refresh Token + Access Token 双令牌机制
-- **API Key 加密存储** — AES 加密模型配置的 ak/sk
-- **HTTPS** — 生产环境强制 TLS
-- **SQL 注入防护** — 审计所有动态 SQL，全部使用参数化查询
+- [x] ~~API 限流（Bucket4j 令牌桶 + RateLimitFilter）~~ → 已完成
+- [x] ~~Token 刷新（Refresh Token 7天 + Access Token 15分钟）~~ → 已完成
+- [x] ~~SQL 注入防护（${topK} → #{topK} + StdOutImpl → Slf4jImpl）~~ → 已完成
+- [x] ~~HTTPS（TLS 1.2/1.3 + HSTS + HTTP→HTTPS 重定向）~~ → 已完成
+- [ ] **API Key 加密存储** — AES 加密模型配置的 ak/sk
 
 ---
 
@@ -45,16 +49,17 @@
 - **Long-term Memory** — 向量化记忆存储 + 语义检索召回
 - **Web Search 工具** — SerpAPI / Bing Search API 联网搜索
 - **Code Interpreter** — 沙箱化 Python/Node 代码执行
-- **本地 MCP STDIO** — 完整的 Model Context Protocol 客户端，支持 `npx` 或 `python` 启动本地 MCP Server，通过 JSON-RPC over STDIO 协议通信。典型场景：读取本地文件系统、执行 Shell 命令、访问本地数据库、调用本地 API 等。当前 `filesystem` 工具为基础实现，后续可替换为标准 MCP Filesystem Server，获得更完整的文件操作能力（写入/移动/搜索/权限校验）
+- [x] ~~MCP STDIO 客户端（JSON-RPC over STDIO + filesystem 工具）~~ → 已完成
 
 ---
 
 ## 📊 运营增强
 
-- **Grafana 集成** — Prometheus + Micrometer 指标可视化
-- **告警通知** — 钉钉/飞书 Webhook 推送异常告警
-- **用量计费** — Token 用量统计 + 用户配额管理
-- **A/B 测试** — 模型效果对比实验
+- [x] ~~Grafana + Prometheus + Loki + Promtail 全栈监控~~ → 已完成
+- [x] ~~JVM 指标仪表盘 + 日志聚合检索~~ → 已完成
+- [ ] **告警通知** — 钉钉/飞书 Webhook 推送异常告警
+- [ ] **用量计费** — Token 用量统计 + 用户配额管理
+- [ ] **A/B 测试** — 模型效果对比实验
 
 ---
 

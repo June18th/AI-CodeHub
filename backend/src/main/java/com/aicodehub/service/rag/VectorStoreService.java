@@ -90,11 +90,14 @@ public class VectorStoreService {
         }
     }
 
-    /** Index a chunk with its embedding */
+    /** Index a single chunk (fallback for small docs) */
     public void indexChunk(Long docId, int chunkIndex, String content, String filename, Long userId) {
         float[] vec = embeddingService.embed(content);
         if (vec == null) return;
+        indexChunkWithVec(docId, chunkIndex, content, filename, userId, vec);
+    }
 
+    private void indexChunkWithVec(Long docId, int chunkIndex, String content, String filename, Long userId, float[] vec) {
         try {
             ObjectNode doc = mapper.createObjectNode();
             doc.put("doc_id", docId);
@@ -114,6 +117,46 @@ public class VectorStoreService {
             client.send(req, HttpResponse.BodyHandlers.discarding());
         } catch (Exception e) {
             log.error("ES index failed: {}", e.getMessage());
+        }
+    }
+
+    /** Bulk index chunks with pre-computed embeddings */
+    public void bulkIndexChunks(Long docId, List<String> chunks, String filename, Long userId) {
+        if (chunks.isEmpty()) return;
+        float[][] vecs = embeddingService.embedBatch(chunks);
+        if (vecs == null) return;
+
+        StringBuilder bulk = new StringBuilder();
+        for (int i = 0; i < chunks.size(); i++) {
+            try {
+                ObjectNode doc = mapper.createObjectNode();
+                doc.put("doc_id", docId);
+                doc.put("chunk_index", i);
+                doc.put("content", chunks.get(i));
+                doc.put("filename", filename);
+                doc.put("user_id", userId);
+                ArrayNode arr = mapper.createArrayNode();
+                for (float v : vecs[i]) arr.add(v);
+                doc.set("embedding", arr);
+
+                bulk.append("{\"index\":{\"_index\":\"").append(INDEX)
+                    .append("\",\"_id\":\"").append(docId).append("_").append(i).append("\"}}\n");
+                bulk.append(mapper.writeValueAsString(doc)).append("\n");
+            } catch (Exception e) {
+                log.error("Bulk index build failed for chunk {}: {}", i, e.getMessage());
+            }
+        }
+
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(esUrl + "/_bulk"))
+                .header("Content-Type", "application/x-ndjson")
+                .POST(HttpRequest.BodyPublishers.ofString(bulk.toString()))
+                .build();
+            HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 400) log.error("ES bulk index error: {}", resp.body());
+        } catch (Exception e) {
+            log.error("ES bulk index failed: {}", e.getMessage());
         }
     }
 
@@ -167,7 +210,7 @@ public class VectorStoreService {
         }
     }
 
-    /** kNN search for relevant chunks */
+    /** Hybrid search: kNN vector + BM25 keyword with RRF fusion */
     public List<Map<String, Object>> search(Long userId, String query, int topK) {
         float[] qVec = embeddingService.embed(query);
         if (qVec == null) return List.of();
@@ -181,15 +224,24 @@ public class VectorStoreService {
             knn.set("query_vector", qArr);
             knn.put("k", topK);
             knn.put("num_candidates", Math.min(topK * 2, 50));
-
             ObjectNode filter = mapper.createObjectNode();
-            ObjectNode term = mapper.createObjectNode();
-            term.put("user_id", userId);
-            filter.set("term", term);
+            filter.set("term", mapper.createObjectNode().put("user_id", userId));
             knn.set("filter", filter);
+
+            ObjectNode bm25 = mapper.createObjectNode();
+            ObjectNode match = mapper.createObjectNode();
+            match.set("content", mapper.createObjectNode().put("query", query));
+            bm25.set("match", match);
 
             ObjectNode body = mapper.createObjectNode();
             body.set("knn", knn);
+            body.set("query", bm25);
+
+            ObjectNode rrf = mapper.createObjectNode();
+            rrf.put("rank_constant", 60);
+            rrf.put("window_size", Math.min(topK * 4, 200));
+            body.set("rank", rrf);
+            body.put("size", topK);
 
             HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(esUrl + "/" + INDEX + "/_search"))

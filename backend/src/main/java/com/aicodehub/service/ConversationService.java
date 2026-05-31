@@ -6,6 +6,8 @@ import com.aicodehub.mapper.ConversationMapper;
 import com.aicodehub.mapper.MessageMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,13 +18,23 @@ public class ConversationService {
 
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
+    private final CacheConsistencyService cacheConsistency;
 
     private static final int MAX_CONTEXT = 20;
 
+    private void evictConversationList(Long conversationId) {
+        Conversation c = conversationMapper.selectById(conversationId);
+        if (c != null) {
+            cacheConsistency.evict("conversations_user", c.getUserId());
+        }
+    }
+
+    @Cacheable(value = "conversation", key = "#id")
     public Conversation getById(Long id) {
         return conversationMapper.selectById(id);
     }
 
+    @CacheEvict(value = {"conversations_user", "conversation"}, key = "#userId")
     public Conversation create(Long userId, String model, String firstPrompt) {
         Conversation c = new Conversation();
         c.setUserId(userId);
@@ -30,16 +42,23 @@ public class ConversationService {
         String cleaned = firstPrompt.replaceAll("\\s+", " ").trim();
         String title = cleaned.length() > 40 ? cleaned.substring(0, 40) + "..." : cleaned;
         c.setTitle(title);
+        c.setSlug(java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         conversationMapper.insert(c);
         return c;
     }
 
+    public Conversation getBySlug(String slug) {
+        return conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>().eq(Conversation::getSlug, slug));
+    }
+
+    @Cacheable(value = "conversations_user", key = "#userId")
     public List<Conversation> listByUser(Long userId) {
         return conversationMapper.selectList(new LambdaQueryWrapper<Conversation>()
             .eq(Conversation::getUserId, userId)
             .orderByDesc(Conversation::getUpdatedAt));
     }
 
+    @CacheEvict(value = {"conversations_user", "conversation", "messages_ctx"}, key = "#userId")
     public void delete(Long id, Long userId) {
         Conversation c = conversationMapper.selectById(id);
         if (c != null && c.getUserId().equals(userId)) {
@@ -52,6 +71,7 @@ public class ConversationService {
         saveMessage(conversationId, role, content, null, null);
     }
 
+    @CacheEvict(value = "messages_ctx", key = "#conversationId")
     public void saveMessage(Long conversationId, String role, String content, Integer inputTokens, Integer outputTokens) {
         Message m = new Message();
         m.setConversationId(conversationId);
@@ -60,12 +80,15 @@ public class ConversationService {
         m.setInputTokens(inputTokens);
         m.setOutputTokens(outputTokens);
         messageMapper.insert(m);
+        // Touch conversation's updated_at to reflect latest activity
+        Conversation c = conversationMapper.selectById(conversationId);
+        if (c != null) {
+            conversationMapper.updateById(c);
+        }
+        evictConversationList(conversationId);
     }
 
-    /**
-     * Get the last N messages as context for the LLM call.
-     * Returns at most MAX_CONTEXT messages, oldest first.
-     */
+    @Cacheable(value = "messages_ctx", key = "#conversationId")
     public List<Message> getContext(Long conversationId) {
         List<Message> all = messageMapper.selectList(new LambdaQueryWrapper<Message>()
             .eq(Message::getConversationId, conversationId)
@@ -83,6 +106,7 @@ public class ConversationService {
             .orderByAsc(Message::getCreatedAt));
     }
 
+    @CacheEvict(value = "conversation", key = "#id")
     public void updateTitle(Long id, String title) {
         Conversation c = conversationMapper.selectById(id);
         if (c != null) {

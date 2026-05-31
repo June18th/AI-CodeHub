@@ -15,18 +15,31 @@ public class JwtUtil {
     private final SecretKey key;
     private final long expiration;
 
+    private final long refreshExpiration;
+
     public JwtUtil(@Value("${jwt.secret}") String secret,
-                   @Value("${jwt.expiration:86400000}") long expiration) {
+                   @Value("${jwt.expiration:86400000}") long expiration,
+                   @Value("${jwt.refresh-expiration:604800000}") long refreshExpiration) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expiration = expiration;
+        this.refreshExpiration = refreshExpiration;
     }
 
     public String generate(Long userId, String role) {
+        return buildToken(userId, role, "access", expiration);
+    }
+
+    public String generateRefreshToken(Long userId, String role) {
+        return buildToken(userId, role, "refresh", refreshExpiration);
+    }
+
+    private String buildToken(Long userId, String role, String type, long ttl) {
         return Jwts.builder()
             .subject(String.valueOf(userId))
             .claim("role", role)
+            .claim("type", type)
             .issuedAt(new Date())
-            .expiration(new Date(System.currentTimeMillis() + expiration))
+            .expiration(new Date(System.currentTimeMillis() + ttl))
             .signWith(key)
             .compact();
     }
@@ -47,6 +60,16 @@ public class JwtUtil {
         try {
             Jwts.parser().verifyWith(key).build().parseSignedClaims(token);
             return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public boolean isAccessToken(String token) {
+        try {
+            String type = Jwts.parser().verifyWith(key).build()
+                .parseSignedClaims(token).getPayload().get("type", String.class);
+            return "access".equals(type);
         } catch (Exception e) {
             return false;
         }

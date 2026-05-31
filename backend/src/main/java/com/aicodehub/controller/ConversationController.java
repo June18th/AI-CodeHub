@@ -22,7 +22,7 @@ public class ConversationController {
         var c = conversationService.create(UserContext.getUserId(),
             body.getOrDefault("model", "deepseek"),
             body.getOrDefault("title", "新对话"));
-        return Result.ok(Map.of("id", c.getId(), "title", c.getTitle(), "model", c.getModel()));
+        return Result.ok(Map.of("id", c.getId(), "slug", c.getSlug(), "title", c.getTitle(), "model", c.getModel()));
     }
 
     @GetMapping

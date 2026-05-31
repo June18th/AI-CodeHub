@@ -69,6 +69,10 @@ export default function AdminPanel() {
               className={`px-4 py-1.5 text-[13px] font-medium rounded-lg transition-all ${tab === 'review' ? 'bg-blue-600 text-white shadow' : 'text-slate-400'}`}>
               用户审核
             </button>
+            <a href="/admin/logs"
+              className="px-4 py-1.5 text-[13px] font-medium text-slate-400 hover:text-white rounded-lg transition-all">
+              日志监控
+            </a>
           </div>
         </div>
       </header>
@@ -97,18 +101,23 @@ export default function AdminPanel() {
                 {/* Hourly trend */}
                 <div className="rounded-2xl border border-slate-700/30 bg-slate-900/60 p-5">
                   <h3 className="text-sm font-semibold text-slate-300 mb-4">24h 调用趋势</h3>
-                  <div className="flex items-end gap-1 h-32">
+                  <div className="flex items-end gap-[2px] h-28">
                     {Array.from({ length: 24 }, (_, i) => {
                       const h = dash.hourlyTrend.find((ht) => ht.hour === i);
                       const hh = h ? h.cnt : 0;
                       return (
-                        <div key={i} className="flex-1 flex flex-col justify-end items-center gap-1">
+                        <div key={i} className="flex-1 flex flex-col justify-end items-center gap-0.5">
                           <span className="text-[9px] text-slate-500">{hh || ''}</span>
                           <div className="w-full rounded-sm bg-blue-500/60 hover:bg-blue-400 transition-colors"
                                style={{ height: `${Math.max(4, (hh / barMax) * 100)}%` }} />
                         </div>
                       );
                     })}
+                  </div>
+                  <div className="flex gap-[2px] mt-1">
+                    {[0,3,6,9,12,15,18,21].map(h => (
+                      <div key={h} className="flex-1 text-[8px] text-slate-600 text-center">{h}h</div>
+                    ))}
                   </div>
                 </div>
 
@@ -156,7 +165,7 @@ export default function AdminPanel() {
                         <tr key={l.id} className="border-b border-slate-800/50">
                           <td className="px-5 py-2.5 text-slate-300">{l.username || '游客'}</td>
                           <td className="px-5 py-2.5 text-slate-400">{l.model}</td>
-                          <td className="px-5 py-2.5 text-slate-400">↑{l.inputTokens} ↓{l.outputTokens}</td>
+                          <td className="px-5 py-2.5 text-slate-400">入 {l.inputTokens}　出 {l.outputTokens}</td>
                           <td className="px-5 py-2.5 text-slate-400">{l.latencyMs}ms</td>
                           <td className="px-5 py-2.5">
                             <span className={`text-[11px] px-1.5 py-0.5 rounded ${l.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>

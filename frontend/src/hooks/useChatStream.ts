@@ -15,7 +15,12 @@ export function useChatStream() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      fetch(url, { signal: controller.signal })
+      let headers: Record<string, string> = {};
+      try {
+        const saved = JSON.parse(localStorage.getItem('aicodehub-auth') || '{}');
+        if (saved.token) headers['Authorization'] = `Bearer ${saved.token}`;
+      } catch {}
+      fetch(url, { signal: controller.signal, headers })
         .then(async (response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const reader = response.body?.getReader();

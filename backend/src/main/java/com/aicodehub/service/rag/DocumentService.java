@@ -35,13 +35,13 @@ public class DocumentService {
         documentMapper.insert(doc);
 
         List<String> chunks = splitChunks(content, CHUNK_SIZE);
-        for (int i = 0; i < chunks.size(); i++) {
-            vectorStore.indexChunk(doc.getId(), i, chunks.get(i), filename, userId);
+        if (!chunks.isEmpty()) {
+            vectorStore.bulkIndexChunks(doc.getId(), chunks, filename, userId);
         }
 
         doc.setStatus("ready");
         documentMapper.updateById(doc);
-        log.info("Document {} uploaded: {} chunks indexed to ES", doc.getId(), chunks.size());
+        log.info("Document {} uploaded: {} chunks bulk-indexed to ES", doc.getId(), chunks.size());
         return doc;
     }
 

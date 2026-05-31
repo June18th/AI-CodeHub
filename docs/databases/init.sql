@@ -8,10 +8,12 @@ CREATE TABLE IF NOT EXISTS conversation (
     user_id     BIGINT       NOT NULL COMMENT '用户ID',
     title       VARCHAR(256) NOT NULL DEFAULT '新对话' COMMENT '对话标题',
     model       VARCHAR(32)  NOT NULL DEFAULT 'deepseek' COMMENT '使用模型',
+    slug        VARCHAR(8)            DEFAULT NULL COMMENT '8位短码',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
-    INDEX idx_user_id (user_id)
+    UNIQUE INDEX uk_slug (slug),
+    INDEX idx_user_updated (user_id, updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对话会话表';
 
 -- 消息
@@ -24,7 +26,8 @@ CREATE TABLE IF NOT EXISTS message (
     output_tokens   INT                   DEFAULT NULL COMMENT '输出Token数',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (id),
-    INDEX idx_conversation_id (conversation_id)
+    INDEX idx_conversation_id (conversation_id),
+    INDEX idx_conv_created (conversation_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='消息表';
 
 -- 用户
@@ -32,8 +35,9 @@ CREATE TABLE IF NOT EXISTS user (
     id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     username      VARCHAR(64)  NOT NULL COMMENT '用户名',
     email         VARCHAR(128) NOT NULL COMMENT '邮箱',
-    password      VARCHAR(256) NOT NULL COMMENT 'BCrypt 加密密码',
-    avatar        VARCHAR(512)          DEFAULT NULL COMMENT '头像URL',
+    password       VARCHAR(256) NOT NULL COMMENT 'BCrypt 加密密码',
+    avatar         VARCHAR(512)          DEFAULT NULL COMMENT '头像URL',
+    refresh_token  VARCHAR(256)          DEFAULT NULL COMMENT 'BCrypt 加密刷新令牌',
     role          VARCHAR(16)  NOT NULL DEFAULT 'user' COMMENT '角色: admin/user/test',
     status        VARCHAR(16)  NOT NULL DEFAULT 'pending' COMMENT '状态: pending/active/rejected',
     apply_reason  VARCHAR(512)          DEFAULT NULL COMMENT '申请理由',
@@ -44,7 +48,8 @@ CREATE TABLE IF NOT EXISTS user (
     deleted       TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除',
     PRIMARY KEY (id),
     UNIQUE KEY uk_username (username),
-    UNIQUE KEY uk_email (email)
+    UNIQUE KEY uk_email (email),
+    INDEX idx_user_role_created (role, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
 -- 文档
@@ -56,7 +61,7 @@ CREATE TABLE IF NOT EXISTS document (
     status      VARCHAR(16)  NOT NULL DEFAULT 'processing' COMMENT '状态: processing/ready/error',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (id),
-    INDEX idx_doc_user (user_id)
+    INDEX idx_doc_user_created (user_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档表';
 
 -- 文档分块
@@ -86,7 +91,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at    DATETIME              DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     INDEX idx_user_time (user_id, created_at),
-    INDEX idx_created (created_at)
+    INDEX idx_created (created_at),
+    INDEX idx_status_created (status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='API调用日志';
 
 -- 模型配置
@@ -104,7 +110,8 @@ CREATE TABLE IF NOT EXISTS model_config (
     created_at   DATETIME              DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME              DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    INDEX idx_user (user_id)
+    INDEX idx_mc_user_updated (user_id, updated_at),
+    INDEX idx_mc_user_provider (user_id, provider)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='模型配置表';
 
 -- 权限
@@ -135,7 +142,7 @@ CREATE TABLE IF NOT EXISTS workflow (
     created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    INDEX idx_wf_user (user_id)
+    INDEX idx_wf_user_updated (user_id, updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流定义表';
 
 -- 工作流执行记录

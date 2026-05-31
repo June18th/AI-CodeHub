@@ -23,9 +23,21 @@ public class AiApiClient {
 
     private final AiModelProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private volatile int failureCount = 0;
+    private volatile long circuitOpenUntil = 0;
+    private static final int FAILURE_THRESHOLD = 5;
+    private static final long CIRCUIT_TIMEOUT_MS = 30_000;
 
     public AiApiClient(AiModelProperties properties) {
         this.properties = properties;
+    }
+
+    private boolean isCircuitOpen() {
+        if (failureCount >= FAILURE_THRESHOLD) {
+            if (System.currentTimeMillis() < circuitOpenUntil) return true;
+            failureCount = 0;
+        }
+        return false;
     }
 
     public void streamCall(String modelType, String prompt,
@@ -41,6 +53,12 @@ public class AiApiClient {
         AiModelProperties.ModelConfig config = properties.getConfig(modelType);
         if (config == null || config.getApiKey() == null || config.getApiKey().isBlank()) {
             onError.accept("模型 [" + modelType + "] 未配置 API Key，请在 .env 中设置");
+            return;
+        }
+
+        if (isCircuitOpen()) {
+            onError.accept("AI 服务暂时不可用，请稍后再试（熔断保护）");
+            onDone.run();
             return;
         }
 
@@ -69,9 +87,15 @@ public class AiApiClient {
                     HttpResponse.BodyHandlers.ofInputStream());
 
                 if (response.statusCode() != 200) {
+                    failureCount++;
+                    if (failureCount >= FAILURE_THRESHOLD) {
+                        circuitOpenUntil = System.currentTimeMillis() + CIRCUIT_TIMEOUT_MS;
+                        log.warn("Circuit breaker OPEN for AI model calls ({} consecutive failures)", failureCount);
+                    }
                     onError.accept("API 返回错误: HTTP " + response.statusCode());
                     return;
                 }
+                failureCount = 0;
 
                 int[] tokenCount = new int[2]; // [input, output]
                 try (BufferedReader reader = new BufferedReader(
@@ -112,6 +136,11 @@ public class AiApiClient {
                 onDone.run();
             } catch (Exception e) {
                 log.error("API call failed for {}: {}", modelType, e.getMessage());
+                failureCount++;
+                if (failureCount >= FAILURE_THRESHOLD) {
+                    circuitOpenUntil = System.currentTimeMillis() + CIRCUIT_TIMEOUT_MS;
+                    log.warn("Circuit breaker OPEN for AI model calls ({} consecutive failures)", failureCount);
+                }
                 onError.accept("调用失败: " + e.getMessage());
                 onDone.run();
             }

@@ -9,6 +9,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-aicodehub}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-aicodehub123}
       TZ: Asia/Shanghai
+    command: --default-time-zone='+08:00'
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
@@ -42,6 +43,7 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
     container_name: aicodehub-es
+    hostname: elasticsearch
     restart: unless-stopped
     environment:
       discovery.type: single-node
@@ -78,6 +80,7 @@ services:
   kafka:
     image: apache/kafka:latest
     container_name: aicodehub-kafka
+    hostname: kafka
     restart: unless-stopped
     environment:
       KAFKA_NODE_ID: "1"
@@ -86,7 +89,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
     ports:
       - "${KAFKA_PORT:-9092}:9092"
     networks:
@@ -105,6 +108,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/workspace
+      - backend-logs:/app/logs
     environment:
       SPRING_PROFILES_ACTIVE: docker
       FILESYSTEM_ROOT: /workspace
@@ -137,6 +141,7 @@ services:
       AI_OPENAI_BASE_URL: ${AI_OPENAI_BASE_URL:-https://api.openai.com/v1}
       AI_OPENAI_MODEL: ${AI_OPENAI_MODEL:-gpt-3.5-turbo}
       AMAP_API_KEY: ${AMAP_API_KEY:-}
+      MCP_COMMAND: ${MCP_COMMAND:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v4}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-2048}
@@ -157,9 +162,82 @@ services:
     container_name: aicodehub-frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${FRONTEND_PORT:-3000}:443"
+      - "3080:80"
+    volumes:
+      - ./config/certs:/etc/nginx/certs:ro
     depends_on:
       - backend
+    networks:
+      - aicodehub-net
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: aicodehub-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}'
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - aicodehub-net
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: aicodehub-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3100}:3000"
+    volumes:
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - aicodehub-net
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: aicodehub-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./config/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks:
+      - aicodehub-net
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: aicodehub-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./config/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - backend-logs:/var/log/app:ro
+    networks:
+      - aicodehub-net
+    depends_on:
+      - loki
+
+  backend-test:
+    image: maven:3.9-eclipse-temurin-21-alpine
+    container_name: aicodehub-test
+    environment:
+      TZ: Asia/Shanghai
+    command: sleep infinity
+    volumes:
+      - ./backend:/app
+      - maven-cache:/root/.m2
+    working_dir: /app
     networks:
       - aicodehub-net
 
@@ -168,6 +246,11 @@ volumes:
   redis-data:
   es-data:
   minio-data:
+  backend-logs:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  maven-cache:
 
 networks:
   aicodehub-net:

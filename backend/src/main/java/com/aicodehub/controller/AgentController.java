@@ -41,7 +41,7 @@ public class AgentController {
         }
         messages.add(Map.of("role", "user", "content", prompt));
 
-        final long start = System.currentTimeMillis();
+        final long start = System.nanoTime();
         functionCallHandler.handleWithTools(modelType, messages,
             wrapper::send,                           // onChunk
             toolName -> wrapper.send("🔧 调用工具: " + toolName + "..."),  // onToolCall
@@ -49,7 +49,7 @@ public class AgentController {
                 int in = wrapper.getInputTokens();
                 int out = wrapper.getOutputTokens();
                 auditService.log(null, null, modelType, "/api/v1/agent/chat", in, out,
-                    (int)(System.currentTimeMillis() - start), "success", null);
+                    (int)((System.nanoTime() - start) / 1_000_000), "success", null);
                 if (conversationId != null) {
                     String resp = wrapper.getResponse();
                     if (!resp.isEmpty()) {
@@ -61,7 +61,7 @@ public class AgentController {
             }),
             errMsg -> {                             // onError
                 auditService.log(null, null, modelType, "/api/v1/agent/chat", 0, 0,
-                    (int)(System.currentTimeMillis() - start), "error", errMsg);
+                    (int)((System.nanoTime() - start) / 1_000_000), "error", errMsg);
                 wrapper.send(errMsg);
                 wrapper.complete(() -> {});
             });

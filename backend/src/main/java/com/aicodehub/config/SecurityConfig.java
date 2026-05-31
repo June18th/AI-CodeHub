@@ -23,6 +23,7 @@ import java.util.Map;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final RateLimitFilter rateLimitFilter;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Bean
@@ -33,10 +34,12 @@ public class SecurityConfig {
             .httpBasic(hb -> hb.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth ->
-                auth.requestMatchers("/api/v1/auth/**", "/api/v1/chat/**", "/api/v1/agent/**").permitAll()
+                auth.requestMatchers("/api/v1/auth/**", "/api/v1/chat/**", "/api/v1/agent/**", "/actuator/health").permitAll()
+                    .requestMatchers("/actuator/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(rateLimitFilter, JwtAuthFilter.class)
             .exceptionHandling(eh -> eh
                 .authenticationEntryPoint((req, res, ex) -> writeJson(res, 401, "未登录"))
                 .accessDeniedHandler((req, res, ex) -> writeJson(res, 403, "无权限"))

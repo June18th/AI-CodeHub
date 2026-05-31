@@ -27,13 +27,25 @@ public class ChatController {
     private final AiApiClient apiClient;
     private final ConversationService conversationService;
     private final com.aicodehub.service.AuditService auditService;
+    private final com.aicodehub.common.JwtUtil jwtUtil;
+
+    private Long resolveUserId(String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                String token = authHeader.substring(7);
+                if (jwtUtil.validate(token)) return jwtUtil.getUserId(token);
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
 
     @GetMapping("/stream")
     public SseEmitter chatStream(@RequestParam String prompt,
                                  @RequestParam(defaultValue = "deepseek") String modelType,
                                  @RequestParam(required = false) Long conversationId,
-                                 @RequestParam(required = false) Long userId) {
+                                 @RequestHeader(value = "Authorization", required = false) String auth) {
         SseEmitter emitter = SseEmitterHelper.createEmitter(120_000L);
+        final Long userId = resolveUserId(auth);
 
         if (conversationId != null) {
             Conversation conv = conversationService.getById(conversationId);
@@ -57,7 +69,7 @@ public class ChatController {
             messages.add(Map.of("role", "user", "content", prompt));
 
             SseSaveWrapper wrapper = new SseSaveWrapper(emitter);
-            final long start = System.currentTimeMillis();
+            final long start = System.nanoTime();
             apiClient.streamCall(modelType, messages,
                 wrapper::send,
                 () -> wrapper.complete(() -> {
@@ -69,20 +81,31 @@ public class ChatController {
                             in > 0 ? in : null, out > 0 ? out : null);
                         conversationService.updateTitle(cid, prompt);
                         auditService.log(userId, null, modelType, "/api/v1/chat/stream", in, out,
-                            (int)(System.currentTimeMillis() - start), "success", null);
+                            (int)((System.nanoTime() - start) / 1_000_000), "success", null);
                     }
                 }),
                 errMsg -> {
                     conversationService.saveMessage(cid, "assistant", errMsg);
                     auditService.log(userId, null, modelType, "/api/v1/chat/stream", 0, 0,
-                        (int)(System.currentTimeMillis() - start), "error", errMsg);
+                        (int)((System.nanoTime() - start) / 1_000_000), "error", errMsg);
                     wrapper.send(errMsg);
                     wrapper.complete(() -> {});
                 });
         } else {
-            // ---- 游客模式 ----
-            AiModelStrategy strategy = aiModelFactory.getStrategy(modelType);
-            strategy.chatStream(prompt, emitter);
+            // Guest mode — stream directly, still log audit
+            final long start = System.nanoTime();
+            SseSaveWrapper wrapper = new SseSaveWrapper(emitter);
+            apiClient.streamCall(modelType, prompt,
+                wrapper::send,
+                () -> wrapper.complete(() -> {
+                    auditService.log(null, null, modelType, "/api/v1/chat/stream",
+                        wrapper.getInputTokens(), wrapper.getOutputTokens(),
+                        (int)((System.nanoTime() - start) / 1_000_000), "success", null);
+                }),
+                errMsg -> {
+                    auditService.log(null, null, modelType, "/api/v1/chat/stream", 0, 0,
+                        (int)((System.nanoTime() - start) / 1_000_000), "error", errMsg);
+                });
         }
 
         return emitter;

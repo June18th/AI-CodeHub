@@ -2,7 +2,7 @@ import { useThemeStore } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 
 const BASE_AGENTS = [
-  { title: 'AI 对话', desc: '多模型流式对话 · Agent工具调用 · RAG检索增强', icon: '💬', href: '/' },
+  { title: 'AI 对话', desc: '多模型流式对话 · Agent工具调用 · RAG检索增强', icon: '💬', href: '/chat' },
   { title: '知识库', desc: '文档上传 · 向量化 · 语义检索', icon: '📚', href: '/rag' },
   { title: '管理后台', desc: '用户审核 · 权限管理 · 运营监控', icon: '⚙️', href: '/admin', adminOnly: true },
 ];

@@ -6,10 +6,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import com.aicodehub.entity.Document;
 import com.aicodehub.service.MinioService;
 import com.aicodehub.service.rag.DocumentService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,50 +22,49 @@ public class DocumentController {
 
     private final DocumentService documentService;
     private final MinioService minioService;
-    private final KafkaTemplate<String, String> kafka;
     private final com.aicodehub.service.rag.VectorStoreService vectorStore;
-    private final ObjectMapper mapper = new ObjectMapper();
 
-    /** Text paste upload */
+    /** Text paste upload — sync batch embedding + bulk ES index */
     @PostMapping
     public Result<?> upload(@RequestBody Map<String, String> body) {
         String content = body.get("content");
         Document doc = documentService.upload(UserContext.getUserId(),
             body.get("filename"), body.getOrDefault("fileType", "txt"), content);
-        // Send to Kafka for async embedding + ES indexing
-        sendToKafka(doc.getId(), UserContext.getUserId(), doc.getFilename(), content);
-        return Result.ok(Map.of("id", doc.getId(), "filename", doc.getFilename(), "status", "processing"));
+        return Result.ok(Map.of("id", doc.getId(), "filename", doc.getFilename(), "status", doc.getStatus()));
     }
 
-    /** File upload to MinIO + Kafka async processing */
+    /** File upload to MinIO — sync batch embedding + bulk ES index */
     @PostMapping("/file")
     public Result<?> uploadFile(@RequestParam("file") MultipartFile file) {
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "unknown";
         Long userId = UserContext.getUserId();
 
-        // Save doc metadata
         Document doc = new Document();
         doc.setUserId(userId);
         doc.setFilename(filename);
         doc.setFileType(filename.contains(".") ? filename.substring(filename.lastIndexOf(".") + 1) : "unknown");
         doc.setStatus("processing");
-        // Store in MySQL via service
         var d = documentService.upload(userId, filename, doc.getFileType(), "");
 
-        // Upload to MinIO
         String path = minioService.upload(userId + "/" + d.getId() + "/" + filename, file);
         if (path == null) return Result.fail("MinIO 上传失败");
 
-        // Read content and send to Kafka for async embedding
         try {
             String content = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            sendToKafka(d.getId(), userId, filename, content);
+            // Update document with actual content and bulk-index
+            var chunks = java.util.List.of(content);
+            // Re-process the doc with actual content
+            vectorStore.bulkIndexChunks(d.getId(),
+                java.util.List.of(content.length() > 500 ?
+                    content.substring(0, 500) : content),
+                filename, userId);
+            d.setStatus("ready");
         } catch (Exception e) {
-            // For binary files, just index the filename
-            sendToKafka(d.getId(), userId, filename, "[文件: " + filename + ", 路径: " + path + "]");
+            d.setStatus("error");
+            log.error("File content processing failed: {}", e.getMessage());
         }
 
-        return Result.ok(Map.of("id", d.getId(), "filename", filename, "status", "processing"));
+        return Result.ok(Map.of("id", d.getId(), "filename", filename, "status", d.getStatus()));
     }
 
     @GetMapping
@@ -84,17 +81,5 @@ public class DocumentController {
     @GetMapping("/{id}/content")
     public Result<?> content(@PathVariable Long id) {
         return Result.ok(vectorStore.getDocContent(id));
-    }
-
-    private void sendToKafka(Long docId, Long userId, String filename, String content) {
-        try {
-            Map<String, Object> event = Map.of(
-                "docId", docId, "userId", userId,
-                "filename", filename, "content", content
-            );
-            kafka.send("doc-processing", mapper.writeValueAsString(event));
-        } catch (Exception e) {
-            log.error("Kafka send failed: {}", e.getMessage());
-        }
     }
 }

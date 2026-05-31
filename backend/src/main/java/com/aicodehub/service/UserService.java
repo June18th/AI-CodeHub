@@ -13,4 +13,5 @@ public interface UserService {
     void register(RegisterRequest req);
     Page<User> listApplications(int page, int size);
     void review(ReviewRequest req, Long reviewerId);
+    Map<String, String> refreshAccessToken(String rawRefreshToken);
 }
