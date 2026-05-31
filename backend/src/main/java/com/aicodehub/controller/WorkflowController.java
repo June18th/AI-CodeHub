@@ -4,12 +4,12 @@ import com.aicodehub.common.Result;
 import com.aicodehub.common.SseEmitterHelper;
 import com.aicodehub.common.SseSaveWrapper;
 import com.aicodehub.common.UserContext;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.aicodehub.entity.Workflow;
 import com.aicodehub.mapper.WorkflowMapper;
 import com.aicodehub.service.workflow.WorkflowEngine;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -18,13 +18,13 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/workflows")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('USER','TEST','ADMIN')")
 public class WorkflowController {
 
     private final WorkflowMapper workflowMapper;
     private final WorkflowEngine engine;
 
     @PostMapping
+    @PreAuthorize("hasRole('workflow:create')")
     public Result<?> create(@RequestBody Map<String, String> body) {
         Workflow wf = new Workflow();
         wf.setUserId(UserContext.getUserId());
@@ -37,6 +37,7 @@ public class WorkflowController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('workflow:create')")
     public Result<?> list() {
         return Result.ok(workflowMapper.selectList(new LambdaQueryWrapper<Workflow>()
             .eq(Workflow::getUserId, UserContext.getUserId())
@@ -44,6 +45,7 @@ public class WorkflowController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('workflow:create')")
     public Result<?> get(@PathVariable Long id) {
         Workflow wf = workflowMapper.selectById(id);
         if (wf == null) return Result.fail(404, "工作流不存在");
@@ -52,6 +54,7 @@ public class WorkflowController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('workflow:create')")
     public Result<?> update(@PathVariable Long id, @RequestBody Map<String, String> body) {
         Workflow wf = workflowMapper.selectById(id);
         if (wf == null) return Result.fail(404, "工作流不存在");
@@ -63,12 +66,14 @@ public class WorkflowController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('workflow:create')")
     public Result<?> delete(@PathVariable Long id) {
         workflowMapper.deleteById(id);
         return Result.ok();
     }
 
     @GetMapping("/{id}/run")
+    @PreAuthorize("hasRole('workflow:create')")
     public SseEmitter run(@PathVariable Long id,
                           @RequestParam(defaultValue = "{}") String params,
                           @RequestParam(required = false) String input) {

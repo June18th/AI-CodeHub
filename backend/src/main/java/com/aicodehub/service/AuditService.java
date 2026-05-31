@@ -18,6 +18,12 @@ public class AuditService {
     public void log(Long userId, String username, String model, String endpoint,
                     int inputTokens, int outputTokens, int latencyMs,
                     String status, String errorMsg) {
+        log(userId, username, model, endpoint, inputTokens, outputTokens, latencyMs, status, errorMsg, null);
+    }
+
+    public void log(Long userId, String username, String model, String endpoint,
+                    int inputTokens, int outputTokens, int latencyMs,
+                    String status, String errorMsg, String tokenBreakdown) {
         if (username == null && userId != null) {
             var user = userMapper.selectById(userId);
             username = user != null ? user.getUsername() : null;
@@ -29,6 +35,7 @@ public class AuditService {
         log.setEndpoint(endpoint);
         log.setInputTokens(inputTokens);
         log.setOutputTokens(outputTokens);
+        log.setTokenBreakdown(tokenBreakdown);
         log.setLatencyMs(latencyMs);
         log.setStatus(status);
         log.setErrorMsg(errorMsg);

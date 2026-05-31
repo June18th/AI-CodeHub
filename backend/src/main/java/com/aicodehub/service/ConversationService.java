@@ -6,12 +6,14 @@ import com.aicodehub.mapper.ConversationMapper;
 import com.aicodehub.mapper.MessageMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConversationService {
@@ -19,8 +21,9 @@ public class ConversationService {
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final CacheConsistencyService cacheConsistency;
+    private final MessageCacheService messageCache;
 
-    private static final int MAX_CONTEXT = 20;
+    private static final int MAX_CONTEXT = 10;
 
     private void evictConversationList(Long conversationId) {
         Conversation c = conversationMapper.selectById(conversationId);
@@ -67,6 +70,7 @@ public class ConversationService {
         if (c != null && c.getUserId().equals(userId)) {
             conversationMapper.deleteById(id);
             messageMapper.delete(new LambdaQueryWrapper<Message>().eq(Message::getConversationId, id));
+            messageCache.evict(id);
         }
     }
 
@@ -83,7 +87,8 @@ public class ConversationService {
         m.setInputTokens(inputTokens);
         m.setOutputTokens(outputTokens);
         messageMapper.insert(m);
-        // Touch conversation's updated_at to reflect latest activity
+        // Push to Redis hot cache
+        messageCache.pushMessage(conversationId, m);
         Conversation c = conversationMapper.selectById(conversationId);
         if (c != null) {
             conversationMapper.updateById(c);
@@ -91,11 +96,20 @@ public class ConversationService {
         evictConversationList(conversationId);
     }
 
-    @Cacheable(value = "messages_ctx", key = "#conversationId")
     public List<Message> getContext(Long conversationId) {
+        // Fast path: Redis hot cache
+        List<Message> cached = messageCache.getRecent(conversationId);
+        if (!cached.isEmpty()) {
+            if (cached.size() > MAX_CONTEXT) {
+                return cached.subList(cached.size() - MAX_CONTEXT, cached.size());
+            }
+            return cached;
+        }
+        // Slow path: MySQL fallback + backfill Redis
         List<Message> all = messageMapper.selectList(new LambdaQueryWrapper<Message>()
             .eq(Message::getConversationId, conversationId)
             .orderByAsc(Message::getCreatedAt));
+        messageCache.backfill(conversationId, all);
         int size = all.size();
         if (size > MAX_CONTEXT) {
             return all.subList(size - MAX_CONTEXT, size);

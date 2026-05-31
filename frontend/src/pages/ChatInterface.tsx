@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useChatStream } from '../hooks/useChatStream';
+import { useWebSocket } from '../hooks/useWebSocket';
 import { useAuthStore, apiFetch } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import LoginModal from '../components/LoginModal';
@@ -182,17 +182,34 @@ export default function ChatInterface() {
   const [conversationSlug, setConversationSlug] = useState<string | null>(id || null);
   const [modalOpen, setModalOpen] = useState(false);
   const [agentMode, setAgentMode] = useState(false);
+  const [multiAgent, setMultiAgent] = useState(false);
   const [clock, setClock] = useState(fmtClock);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { startStream, abort } = useChatStream();
   const { isLoggedIn, isAdmin, token } = useAuthStore();
+  const { state: wsState, send: wsSend, on: wsOn } = useWebSocket(isLoggedIn ? token : null);
   const { theme, toggle: toggleTheme } = useThemeStore();
 
   useEffect(() => { const id = setInterval(() => setClock(fmtClock()), 1000); return () => clearInterval(id); }, []);
   useEffect(() => { (window as any).__openLoginModal = () => setModalOpen(true); return () => { delete (window as any).__openLoginModal; }; }, []);
   useEffect(() => { const t = setTimeout(() => { if (!isLoggedIn) setModalOpen(true); }, 300); return () => clearTimeout(t); }, [isLoggedIn]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages]);
+
+  // WebSocket listeners
+  useEffect(() => {
+    const u1 = wsOn('chunk', (data: any) =>
+      setMessages(p => { const text = typeof data === 'string' ? data : (data?.content || ''); const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content: l.content + text }; return u; }));
+    const u2 = wsOn('done', () => setStreaming(false));
+    const u3 = wsOn('error', (data: any) => {
+      setMessages(p => { const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content: `请求失败：${data?.message || '未知错误'}` }; return u; });
+      setStreaming(false);
+    });
+    const u4 = wsOn('token', (data: any) =>
+      setMessages(p => { const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, inputTokens: data?.input, outputTokens: data?.output }; return u; }));
+    const u5 = wsOn('tool_call', (data: any) =>
+      setMessages(p => { const t: Message = { id: uid(), role: 'assistant', content: `🔧 调用工具: ${data?.tool || ''}`, timestamp: Date.now() }; return [...p, t]; }));
+    return () => { u1(); u2(); u3(); u4(); u5(); };
+  }, [wsOn]);
 
   // Resolve slug to conversation ID
   useEffect(() => {
@@ -218,50 +235,35 @@ export default function ChatInterface() {
 
   const newConversation = useCallback(() => { setMessages([]); setConversationId(null); setConversationSlug(null); navigate('/chat', { replace: true }); }, [navigate]);
 
-  const sendWithConvId = (text: string, cid: number) => {
+  const sendChat = (text: string, cid: number | null, mode: 'chat' | 'agent' | 'crew') => {
     const now = Date.now();
-    const um: Message = { id: uid(), role: 'user', content: text, timestamp: now };
-    const am: Message = { id: uid(), role: 'assistant', content: '', model, timestamp: now };
-    setMessages((prev) => [...prev, um, am]); setInput('');
-    const base = agentMode ? '/api/v1/agent/chat' : '/api/v1/chat/stream';
-    const url = `${base}?prompt=${encodeURIComponent(text)}&modelType=${model}&conversationId=${cid}`;
+    setMessages(prev => [...prev, { id: uid(), role: 'user', content: text, timestamp: now }, { id: uid(), role: 'assistant', content: '', model, timestamp: now }]);
+    setInput('');
     setStreaming(true);
-    startStream(url,
-      (c) => setMessages((p) => { const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content: l.content + c }; return u; }),
-      () => setStreaming(false),
-      (err) => { setMessages((p) => { const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content: `请求失败：${err.message}` }; return u; }); setStreaming(false); },
-      (i, o) => setMessages((p) => { const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, inputTokens: i, outputTokens: o }; return u; }),
-    );
+    const msg: any = { type: mode, prompt: text, modelType: model };
+    if (cid) msg.conversationId = cid;
+    wsSend(mode, msg);
   };
 
   const sendMessage = useCallback((text: string, useAgent: boolean) => {
     if (!text.trim() || streaming) return;
-    const now = Date.now();
-    setMessages((prev) => [...prev, { id: uid(), role: 'user', content: text, timestamp: now }, { id: uid(), role: 'assistant', content: '', model, timestamp: now }]);
-    setInput('');
-    const base = useAgent ? '/api/v1/agent/chat' : '/api/v1/chat/stream';
-    const params = `prompt=${encodeURIComponent(text)}&modelType=${model}`;
-    const url = isLoggedIn && conversationId ? `${base}?${params}&conversationId=${conversationId}` : `${base}?${params}`;
-    setStreaming(true);
-    startStream(url,
-      (c) => setMessages((p) => { const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content: l.content + c }; return u; }),
-      () => setStreaming(false),
-      (err) => { setMessages((p) => { const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content: `请求失败：${err.message}` }; return u; }); setStreaming(false); },
-      (i, o) => setMessages((p) => { const u = [...p]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, inputTokens: i, outputTokens: o }; return u; }),
-    );
-  }, [model, streaming, startStream, isLoggedIn, conversationId]);
+    if (!wsState.connected) { setMessages(p => [...p, { id: uid(), role: 'assistant', content: 'WebSocket 未连接，正在重连...', timestamp: Date.now() }]); return; }
+    if (multiAgent) sendChat(text, conversationId, 'crew');
+    else if (useAgent) sendChat(text, conversationId, 'agent');
+    else sendChat(text, conversationId, 'chat');
+  }, [model, streaming, multiAgent, conversationId, wsSend, wsState.connected]);
 
   const handleSendOrCreate = async () => {
     const text = input.trim(); if (!text || streaming) return;
     if (isLoggedIn && !conversationId) {
       const res = await apiFetch('/api/v1/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token!}` }, body: JSON.stringify({ model, title: text }) });
       const data = await res.json();
-      if (data.code === 200 && data.data?.id) { setConversationId(data.data.id); navigate('/chat/'+data.data.slug, { replace: true }); sendWithConvId(text, data.data.id); return; }
+      if (data.code === 200 && data.data?.id) { setConversationId(data.data.id); navigate('/chat/'+data.data.slug, { replace: true }); sendChat(text, data.data.id, agentMode ? 'agent' : 'chat'); return; }
     }
     sendMessage(text, agentMode);
   };
 
-  const handleStop = () => { abort(); setStreaming(false); };
+  const handleStop = () => { wsSend('abort', {}); setStreaming(false); };
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendOrCreate(); } };
 
   const lastMsg = messages[messages.length - 1];
@@ -395,6 +397,14 @@ export default function ChatInterface() {
                 }`}>
                 {agentMode ? 'Agent' : '对话'}
               </button>
+              {agentMode && (
+                <button onClick={() => setMultiAgent(!multiAgent)}
+                  className={`h-8 px-3 text-[13px] font-semibold rounded-xl transition-all duration-200 ${
+                    multiAgent ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40'
+                  }`}>
+                  🤖 多Agent
+                </button>
+              )}
               <span className="text-[12px] text-slate-400 dark:text-slate-500 hidden sm:inline">
                 {agentMode ? '工具调用 · 知识库检索' : 'Enter 发送 · Shift+Enter 换行'}
               </span>

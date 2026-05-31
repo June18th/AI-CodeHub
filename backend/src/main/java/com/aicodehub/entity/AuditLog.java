@@ -15,6 +15,7 @@ public class AuditLog {
     private String endpoint;
     private Integer inputTokens;
     private Integer outputTokens;
+    private String tokenBreakdown;
     private Integer latencyMs;
     private String status;
     private String errorMsg;

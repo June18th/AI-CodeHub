@@ -10,15 +10,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/agent")
 @RequiredArgsConstructor
 public class AgentController {
+
+    private static final String SYSTEM_GUARD = """
+        你是 AI-CodeHub 智能助手，可以使用工具完成任务。请遵守以下规则：
+        1. 如果不确定该怎么做，直接询问用户，不要猜测或编造答案
+        2. 每次工具调用前先思考：这个工具是否真的必要？是否有更直接的方式？
+        3. 工具返回错误时，分析原因并尝试替代方案，不要重复相同的失败调用
+        4. 完成用户任务后，用简洁的中文总结结果""";
 
     private final FunctionCallHandler functionCallHandler;
     private final ConversationService conversationService;
@@ -31,7 +36,7 @@ public class AgentController {
                                 @RequestParam(defaultValue = "deepseek") String modelType,
                                 @RequestParam(required = false) Long conversationId,
                                 @RequestHeader(value = "Authorization", required = false) String auth) {
-        SseEmitter emitter = SseEmitterHelper.createEmitter(180_000L);
+        SseEmitter emitter = SseEmitterHelper.createEmitter(300_000L);
         if (auth != null && auth.startsWith("Bearer ")) {
             try {
                 String token = auth.substring(7);
@@ -44,6 +49,8 @@ public class AgentController {
         SseSaveWrapper wrapper = new SseSaveWrapper(emitter);
 
         List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", SYSTEM_GUARD));
+
         if (conversationId != null) {
             conversationService.saveMessage(conversationId, "user", prompt);
             List<Message> history = conversationService.getContext(conversationId);
@@ -55,9 +62,9 @@ public class AgentController {
 
         final long start = System.nanoTime();
         functionCallHandler.handleWithTools(modelType, messages,
-            wrapper::send,                           // onChunk
-            toolName -> wrapper.send("🔧 调用工具: " + toolName + "..."),  // onToolCall
-            () -> wrapper.complete(() -> {           // onDone
+            wrapper::send,
+            toolName -> wrapper.send("🔧 调用工具: " + toolName + "..."),
+            () -> wrapper.complete(() -> {
                 int in = wrapper.getInputTokens();
                 int out = wrapper.getOutputTokens();
                 auditService.log(null, null, modelType, "/api/v1/agent/chat", in, out,
@@ -71,7 +78,7 @@ public class AgentController {
                     }
                 }
             }),
-            errMsg -> {                             // onError
+            errMsg -> {
                 auditService.log(null, null, modelType, "/api/v1/agent/chat", 0, 0,
                     (int)((System.nanoTime() - start) / 1_000_000), "error", errMsg);
                 wrapper.send(errMsg);

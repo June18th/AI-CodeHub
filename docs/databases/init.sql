@@ -162,3 +162,19 @@ CREATE TABLE IF NOT EXISTS workflow_run (
     INDEX idx_wfr_workflow (workflow_id),
     INDEX idx_wfr_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流执行记录';
+
+-- Agent 异步任务
+CREATE TABLE IF NOT EXISTS agent_task (
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id     BIGINT       NOT NULL,
+    prompt      TEXT         NOT NULL,
+    model_type  VARCHAR(32)  DEFAULT 'deepseek',
+    status      VARCHAR(16)  DEFAULT 'pending' COMMENT 'pending/running/done/failed',
+    result      MEDIUMTEXT,
+    error_msg   VARCHAR(1024),
+    created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_task_user (user_id),
+    INDEX idx_task_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent异步任务';

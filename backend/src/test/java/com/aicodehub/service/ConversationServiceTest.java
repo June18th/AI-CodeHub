@@ -19,6 +19,7 @@ class ConversationServiceTest {
     private ConversationMapper convMapper;
     private MessageMapper msgMapper;
     private CacheConsistencyService cacheConsistency;
+    private MessageCacheService messageCache;
     private ConversationService service;
 
     @BeforeEach
@@ -26,7 +27,9 @@ class ConversationServiceTest {
         convMapper = mock(ConversationMapper.class);
         msgMapper = mock(MessageMapper.class);
         cacheConsistency = mock(CacheConsistencyService.class);
-        service = new ConversationService(convMapper, msgMapper, cacheConsistency);
+        messageCache = mock(MessageCacheService.class);
+        service = new ConversationService(convMapper, msgMapper, cacheConsistency, messageCache);
+        when(messageCache.getRecent(anyLong())).thenReturn(List.of());
     }
 
     @Test
@@ -49,9 +52,9 @@ class ConversationServiceTest {
         when(msgMapper.selectList(any())).thenReturn(msgs);
 
         var result = service.getContext(1L);
-        assertEquals(20, result.size());
-        assertEquals("msg 10", result.get(0).getContent()); // last 20 start at index 10
-        assertEquals("msg 29", result.get(19).getContent());
+        assertEquals(10, result.size());
+        assertEquals("msg 20", result.get(0).getContent()); // last 10 start at index 20
+        assertEquals("msg 29", result.get(9).getContent());
     }
 
     @Test

@@ -26,6 +26,7 @@ public class ChatController {
     private final AiModelFactory aiModelFactory;
     private final AiApiClient apiClient;
     private final ConversationService conversationService;
+    private final com.aicodehub.service.MemoryService memoryService;
     private final com.aicodehub.service.AuditService auditService;
     private final com.aicodehub.common.JwtUtil jwtUtil;
     private final com.aicodehub.service.SessionService sessionService;
@@ -64,14 +65,9 @@ public class ChatController {
             }
 
             final Long cid = conv.getId();
-            List<Message> history = conversationService.getContext(cid);
             conversationService.saveMessage(cid, "user", prompt);
 
-            List<Map<String, String>> messages = new ArrayList<>();
-            for (Message m : history) {
-                messages.add(Map.of("role", m.getRole(), "content", m.getContent()));
-            }
-            messages.add(Map.of("role", "user", "content", prompt));
+            List<Map<String, String>> messages = memoryService.buildContext(userId, cid, prompt, modelType);
 
             SseSaveWrapper wrapper = new SseSaveWrapper(emitter);
             final long start = System.nanoTime();
@@ -88,6 +84,7 @@ public class ChatController {
                         auditService.log(userId, null, modelType, "/api/v1/chat/stream", in, out,
                             (int)((System.nanoTime() - start) / 1_000_000), "success", null);
                     }
+                    if (userId != null) memoryService.maybeCompress(userId, cid);
                 }),
                 errMsg -> {
                     conversationService.saveMessage(cid, "assistant", errMsg);

@@ -7,12 +7,12 @@ const BASE_AGENTS = [
   { title: '管理后台', desc: '用户审核 · 权限管理 · 运营监控', icon: '⚙️', href: '/admin', adminOnly: true },
 ];
 const CAPABILITIES = [
-  { name: 'Workflow', desc: 'DAG任务编排 · 条件分支 · 并行执行', status: 'live', icon: '⚡' },
+  { name: 'Workflow', desc: 'DAG任务编排 · 条件分支 · 并行执行', status: 'live', icon: '⚡', href: '/copilot/workflow' },
   { name: 'Tool Calling', desc: '计算器 · 天气查询 · 知识检索', status: 'live', icon: '🔧' },
   { name: 'Memory', desc: '对话上下文 · 长期记忆 · Redis缓存', status: 'live', icon: '🧠' },
-  { name: 'RAG', desc: '千问Embedding · ES向量检索', status: 'live', icon: '🔍' },
-  { name: 'Multi-Agent', desc: '多Agent协作 · 任务分配', status: 'soon', icon: '🤖' },
-  { name: 'Runtime', desc: '任务调度 · 上下文管理 · 状态追踪', status: 'soon', icon: '⏱️' },
+  { name: 'RAG', desc: '千问Embedding · ES向量检索', status: 'live', icon: '🔍', href: '/rag' },
+  { name: 'Multi-Agent', desc: '多Agent协作 · 任务分配', status: 'live', icon: '🤖' },
+  { name: 'Runtime', desc: '任务调度 · 异步执行 · 状态追踪', status: 'live', icon: '⏱️', href: '/copilot/tasks' },
 ];
 
 export default function CopilotOverview() {
@@ -36,7 +36,7 @@ export default function CopilotOverview() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
           <div><h2 className={`text-lg font-bold mb-4 ${dark ? 'text-slate-100' : 'text-slate-800'}`}>快速入口</h2><div className="flex gap-4">{AGENTS.map((a) => (<a key={a.title} href={a.href} className={`flex-1 rounded-2xl border p-5 transition-all duration-200 hover:shadow-lg ${dark ? 'bg-slate-900/60 border-slate-700/30 hover:border-slate-600' : 'bg-white border-slate-200 hover:border-slate-300'}`}><div className="flex items-center gap-3"><span className="text-2xl">{a.icon}</span><div><h3 className={`text-sm font-semibold ${dark ? 'text-slate-200' : 'text-slate-800'}`}>{a.title}</h3><p className={`text-[12px] ${dark ? 'text-slate-500' : 'text-slate-400'}`}>{a.desc}</p></div></div></a>))}</div></div>
-          <div><h2 className={`text-lg font-bold mb-4 ${dark ? 'text-slate-100' : 'text-slate-800'}`}>Agent 核心能力</h2><div className="grid grid-cols-3 gap-4">{CAPABILITIES.map((c) => (<div key={c.name} className={`rounded-2xl border p-4 flex items-center gap-3 ${dark ? 'bg-slate-900/60 border-slate-700/30' : 'bg-white border-slate-200'}`}><span className="text-xl">{c.icon}</span><div className="min-w-0"><div className="flex items-center gap-2 mb-0.5"><h3 className={`text-sm font-semibold ${dark ? 'text-slate-200' : 'text-slate-800'}`}>{c.name}</h3><span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${c.status === 'live' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>{c.status === 'live' ? '上线' : '规划'}</span></div><p className={`text-[12px] truncate ${dark ? 'text-slate-500' : 'text-slate-400'}`}>{c.desc}</p></div></div>))}</div></div>
+          <div><h2 className={`text-lg font-bold mb-4 ${dark ? 'text-slate-100' : 'text-slate-800'}`}>Agent 核心能力</h2><div className="grid grid-cols-3 gap-4">{CAPABILITIES.map((c) => { const inner = (<><span className="text-xl">{c.icon}</span><div className="min-w-0"><div className="flex items-center gap-2 mb-0.5"><h3 className={`text-sm font-semibold ${dark ? 'text-slate-200' : 'text-slate-800'}`}>{c.name}</h3><span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${c.status==='live'?'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400':'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>{c.status==='live'?'上线':'规划'}</span></div><p className={`text-[12px] truncate ${dark?'text-slate-500':'text-slate-400'}`}>{c.desc}</p></div></>); return c.href ? <a key={c.name} href={c.href} className={`rounded-2xl border p-4 flex items-center gap-3 transition-all duration-200 hover:shadow-lg ${dark?'bg-slate-900/60 border-slate-700/30 hover:border-slate-600':'bg-white border-slate-200 hover:border-slate-300'}`}>{inner}</a> : <div key={c.name} className={`rounded-2xl border p-4 flex items-center gap-3 ${dark?'bg-slate-900/60 border-slate-700/30':'bg-white border-slate-200'}`}>{inner}</div>; })}</div></div>
           <div className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900/60 border-slate-700/30' : 'bg-white border-slate-200 shadow-sm'}`}>
             <h2 className={`text-lg font-bold mb-3 ${dark ? 'text-slate-100' : 'text-slate-800'}`}>模型配置</h2>
             <p className={`text-[13px] mb-3 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>统一管理各模型供应商的 API 地址、密钥、模型参数</p>

@@ -2,11 +2,11 @@ package com.aicodehub.controller;
 
 import com.aicodehub.common.Result;
 import com.aicodehub.common.UserContext;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.aicodehub.entity.User;
 import com.aicodehub.mapper.UserMapper;
 import com.aicodehub.service.MinioService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -15,13 +15,13 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/user")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('USER','TEST','ADMIN')")
 public class UserController {
 
     private final UserMapper userMapper;
     private final MinioService minioService;
 
     @GetMapping("/profile")
+    @PreAuthorize("hasRole('user:profile')")
     public Result<?> profile() {
         User u = userMapper.selectById(UserContext.getUserId());
         if (u == null) return Result.fail("用户不存在");
@@ -29,6 +29,7 @@ public class UserController {
     }
 
     @PutMapping("/profile")
+    @PreAuthorize("hasRole('user:profile')")
     public Result<?> updateProfile(@RequestBody Map<String, String> body) {
         User u = userMapper.selectById(UserContext.getUserId());
         if (u == null) return Result.fail("用户不存在");
@@ -39,6 +40,7 @@ public class UserController {
     }
 
     @PostMapping("/avatar")
+    @PreAuthorize("hasRole('user:profile')")
     public Result<?> uploadAvatar(@RequestParam("file") MultipartFile file) {
         Long uid = UserContext.getUserId();
         String url = minioService.uploadAvatar(file);

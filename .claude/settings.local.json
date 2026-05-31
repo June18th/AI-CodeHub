@@ -12,7 +12,8 @@
       "Bash(docker cp *)",
       "Bash(docker exec *)",
       "Bash(docker exec aicodehub-test sh -c 'echo '\\\\''#!/bin/sh *)",
-      "Bash(chmod +x /app/run-tests.sh)"
+      "Bash(chmod +x /app/run-tests.sh)",
+      "Bash(docker compose *)"
     ]
   }
 }

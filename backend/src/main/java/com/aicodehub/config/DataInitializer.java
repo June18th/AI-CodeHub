@@ -20,7 +20,6 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        // Init admin
         if (userMapper.selectCount(null) == 0) {
             User admin = new User();
             admin.setUsername("admin");
@@ -32,31 +31,37 @@ public class DataInitializer implements CommandLineRunner {
             log.info("Default admin created: admin / admin123");
         }
 
-        // Seed permissions
         seedPermission("dashboard:view", "运营监控查看");
         seedPermission("user:review", "用户审核");
+        seedPermission("user:profile", "个人资料管理");
         seedPermission("model:config", "模型配置管理");
         seedPermission("knowledge:upload", "知识库上传");
-        seedPermission("workflow:create", "工作流创建");
         seedPermission("document:preview", "文档内容预览");
+        seedPermission("workflow:create", "工作流创建");
+        seedPermission("conversation:access", "对话管理");
 
-        // admin gets all
         mapRole("admin", "dashboard:view");
         mapRole("admin", "user:review");
+        mapRole("admin", "user:profile");
         mapRole("admin", "model:config");
         mapRole("admin", "knowledge:upload");
-        mapRole("admin", "workflow:create");
         mapRole("admin", "document:preview");
-        // test gets agent + knowledge + workflow + doc preview
+        mapRole("admin", "workflow:create");
+        mapRole("admin", "conversation:access");
+
         mapRole("test", "knowledge:upload");
         mapRole("test", "workflow:create");
         mapRole("test", "document:preview");
         mapRole("test", "model:config");
-        // user: knowledge + doc + workflow + model config (own keys)
+        mapRole("test", "user:profile");
+        mapRole("test", "conversation:access");
+
         mapRole("user", "knowledge:upload");
         mapRole("user", "document:preview");
         mapRole("user", "workflow:create");
         mapRole("user", "model:config");
+        mapRole("user", "user:profile");
+        mapRole("user", "conversation:access");
     }
 
     private void seedPermission(String code, String name) {

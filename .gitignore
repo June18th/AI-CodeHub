@@ -20,6 +20,16 @@ Thumbs.db
 # Docker data
 mysql-data/
 redis-data/
+es-data/
+minio-data/
+backend-logs/
+prometheus-data/
+grafana-data/
+loki-data/
+maven-cache/
+
+# Certificates
+config/certs/
 
 # Logs
 *.log

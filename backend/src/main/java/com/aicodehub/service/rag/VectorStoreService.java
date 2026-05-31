@@ -268,4 +268,109 @@ public class VectorStoreService {
             return List.of();
         }
     }
+
+    // ── Long-term memory summaries ──
+
+    private static final String SUMMARY_INDEX = "memory_summaries";
+
+    public void ensureSummaryIndex() {
+        try {
+            var head = HttpRequest.newBuilder()
+                .uri(URI.create(esUrl + "/" + SUMMARY_INDEX)).method("HEAD", HttpRequest.BodyPublishers.noBody()).build();
+            var resp = client.send(head, HttpResponse.BodyHandlers.discarding());
+            if (resp.statusCode() == 200) return;
+        } catch (Exception ignored) {}
+
+        try {
+            ObjectNode settings = mapper.createObjectNode();
+            settings.set("index", mapper.createObjectNode().put("number_of_shards", 1).put("number_of_replicas", 0));
+            ObjectNode props = mapper.createObjectNode();
+            props.set("user_id", mapper.createObjectNode().put("type", "long"));
+            props.set("conversation_id", mapper.createObjectNode().put("type", "long"));
+            props.set("content", mapper.createObjectNode().put("type", "text"));
+            props.set("saved_at", mapper.createObjectNode().put("type", "long"));
+            props.set("source", mapper.createObjectNode().put("type", "keyword"));
+            ObjectNode vec = mapper.createObjectNode();
+            vec.put("type", "dense_vector");
+            vec.put("dims", DIM);
+            vec.put("index", true);
+            vec.put("similarity", "cosine");
+            props.set("embedding", vec);
+            ObjectNode mapping = mapper.createObjectNode().set("properties", props);
+            ObjectNode body = mapper.createObjectNode();
+            body.set("settings", settings);
+            body.set("mappings", mapping);
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(esUrl + "/" + SUMMARY_INDEX))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
+                .build();
+            client.send(req, HttpResponse.BodyHandlers.discarding());
+            log.info("ES index {} created", SUMMARY_INDEX);
+        } catch (Exception e) {
+            log.error("Failed to create summary index: {}", e.getMessage());
+        }
+    }
+
+    public void indexSummary(Long userId, Long conversationId, String content, float[] vec) {
+        indexSummary(userId, conversationId, content, vec, "auto");
+    }
+
+    public void indexSummary(Long userId, Long conversationId, String content, float[] vec, String source) {
+        try {
+            ObjectNode doc = mapper.createObjectNode();
+            doc.put("user_id", userId);
+            doc.put("conversation_id", conversationId);
+            doc.put("content", content);
+            doc.put("saved_at", System.currentTimeMillis());
+            doc.put("source", source);
+            ArrayNode arr = mapper.createArrayNode();
+            for (float v : vec) arr.add(v);
+            doc.set("embedding", arr);
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(esUrl + "/" + SUMMARY_INDEX + "/_doc/" + conversationId + "_" + System.nanoTime()))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(doc)))
+                .build();
+            client.send(req, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception e) {
+            log.error("Summary index failed: {}", e.getMessage());
+        }
+    }
+
+    public List<com.aicodehub.service.MemoryEntry> searchSummaries(Long userId, float[] qVec, int topK) {
+        try {
+            ArrayNode qArr = mapper.createArrayNode();
+            for (float v : qVec) qArr.add(v);
+            ObjectNode knn = mapper.createObjectNode();
+            knn.put("field", "embedding");
+            knn.set("query_vector", qArr);
+            knn.put("k", topK);
+            knn.put("num_candidates", Math.min(topK * 3, 50));
+            knn.set("filter", mapper.createObjectNode().set("term", mapper.createObjectNode().put("user_id", userId)));
+            ObjectNode body = mapper.createObjectNode();
+            body.set("knn", knn);
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(esUrl + "/" + SUMMARY_INDEX + "/_search"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(10))
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
+                .build();
+            HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+            List<com.aicodehub.service.MemoryEntry> results = new ArrayList<>();
+            JsonNode hits = mapper.readTree(resp.body()).path("hits").path("hits");
+            for (JsonNode hit : hits) {
+                JsonNode src = hit.get("_source");
+                results.add(new com.aicodehub.service.MemoryEntry(
+                    src.get("content").asText(),
+                    src.has("saved_at") ? src.get("saved_at").asLong() : System.currentTimeMillis(),
+                    src.has("source") ? src.get("source").asText() : "auto"
+                ));
+            }
+            return results;
+        } catch (Exception e) {
+            log.error("Summary search failed: {}", e.getMessage());
+            return List.of();
+        }
+    }
 }

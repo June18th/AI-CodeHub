@@ -2,7 +2,6 @@ package com.aicodehub.controller;
 
 import com.aicodehub.common.Result;
 import com.aicodehub.common.UserContext;
-import org.springframework.security.access.prepost.PreAuthorize;
 import com.aicodehub.entity.ModelConfig;
 import com.aicodehub.mapper.ModelConfigMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -10,6 +9,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -17,13 +17,13 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/model-configs")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('USER','TEST','ADMIN')")
 public class ModelConfigController {
 
     private final ModelConfigMapper mapper;
 
     @GetMapping
     @Cacheable(value = "model_configs", key = "T(com.aicodehub.common.UserContext).getUserId()")
+    @PreAuthorize("hasRole('model:config')")
     public Result<?> list() {
         return Result.ok(mapper.selectList(new LambdaQueryWrapper<ModelConfig>()
             .eq(ModelConfig::getUserId, UserContext.getUserId())
@@ -32,6 +32,7 @@ public class ModelConfigController {
 
     @PostMapping
     @CacheEvict(value = "model_configs", key = "T(com.aicodehub.common.UserContext).getUserId()")
+    @PreAuthorize("hasRole('model:config')")
     public Result<?> create(@RequestBody ModelConfig config) {
         config.setUserId(UserContext.getUserId());
         mapper.insert(config);
@@ -40,6 +41,7 @@ public class ModelConfigController {
 
     @PutMapping("/{id}")
     @CacheEvict(value = "model_configs", key = "T(com.aicodehub.common.UserContext).getUserId()")
+    @PreAuthorize("hasRole('model:config')")
     public Result<?> update(@PathVariable Long id, @RequestBody ModelConfig config) {
         ModelConfig exist = mapper.selectById(id);
         if (exist == null) return Result.fail("配置不存在");
@@ -50,6 +52,7 @@ public class ModelConfigController {
 
     @DeleteMapping("/{id}")
     @CacheEvict(value = "model_configs", key = "T(com.aicodehub.common.UserContext).getUserId()")
+    @PreAuthorize("hasRole('model:config')")
     public Result<?> delete(@PathVariable Long id) {
         mapper.deleteById(id);
         return Result.ok();
@@ -57,6 +60,7 @@ public class ModelConfigController {
 
     @PutMapping("/{id}/default")
     @CacheEvict(value = "model_configs", key = "T(com.aicodehub.common.UserContext).getUserId()")
+    @PreAuthorize("hasRole('model:config')")
     public Result<?> setDefault(@PathVariable Long id) {
         ModelConfig config = mapper.selectById(id);
         if (config == null) return Result.fail("配置不存在");

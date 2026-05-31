@@ -2,159 +2,161 @@
 
 ## 2026-05-31
 
-### 生产级可观测性 (Grafana + Prometheus + Loki)
+### 动态 RBAC 权限系统
+- 数据库驱动的权限模型：`permission` + `role_permission` 表存储角色-权限映射，不再硬编码
+- `PermissionMapper` / `RolePermissionMapper` 实体化，`PermissionService` 负责缓存与刷新
+- Redis 缓存权限（`rbac:perm:<role>`，24h TTL），多实例共享，读取零延迟
+- 新增 `user:profile`、`conversation:access` 权限码，Seed 脚本自动初始化
+- `UserDetailsServiceImpl` 实现 Spring Security `UserDetailsService`，加载 ROLE_ + 细粒度权限
+- `UserPrincipal` 扩展 UserDetails，存储 DB 实时角色（非 JWT 签死值）
+- `JwtAuthFilter` 接入 UserDetailsService，移除重复 PUBLIC_PATHS，异常日志化
+- `@PreAuthorize("hasRole('dashboard:view')")` 方法级权限校验，替换类级注解
+- `POST /api/v1/admin/permissions/reload` 运行时刷新权限缓存
+- 移除死代码：`AuthInterceptor` / `@RequireRole`
+
+### Agent ReAct 决策循环 + 预算控制
+- `while(true)` 循环：每轮大模型根据完整对话历史（含工具执行结果）自主决定继续调工具还是输出答案
+- `AgentBudget` 预算控制：最大 5 轮迭代 + 16000 token 上限，超限强制退出
+- System Prompt 护栏：告知模型"不确定时直接问用户，不要猜测"，工具失败时分析原因不重复失败调用
+- `FunctionCallHandler` 完整支持 system/user/assistant(tool_calls)/tool(tool_call_id) 多轮对话格式
+- 工具执行异常不中断循环，异常信息作为 tool message 返回让模型重新思考
+- 结构化 SSE 事件：`{"type":"tool_call","tool":"xxx","status":"executing"}` / `tool_result` / `budget_exceeded`
+- 新增 3 个知识库 Agent Tool：
+  - `summarize` — 接收文档内容生成结构化摘要（独立 LLM 调用）
+  - `save_feedback` — 用户评价存入 Redis（rating 1-5 + 意见），90 天保留
+  - `knowledge_stats` — 知识库统计（文档数/类型分布/最近上传）
+
+### 对话历史 Redis 热缓存
+- `MessageCacheService`：Redis List 存储最近 20 条消息（`msg_list:<conversationId>`，2h TTL）
+- 写入路径：消息持久化 MySQL → 同步 `LPUSH` 到 Redis + `LTRIM` 保持滑动窗口
+- 读取路径：Redis 热路径（命中率高）→ MySQL 兜底 → 自动 `backfill` 回填 Redis
+- 访问自动续期 TTL，对话删除时同步清除 Redis key
+- 修复 `ChatWebSocketHandler` 预存编译错误（`var` 参数类型 + 静态内部类引用实例字段）
+- WebSocket 支持 JWT 认证（`ws://` 连接通过 `?token=` 查询参数传递，`JwtAuthFilter` 自动提取）
+- WebSocket 消息兼容完整 Agent/Crew 模式（`chat` / `agent` / `crew` / `resume` 四种 type）
+
+### 可观测性（Grafana + Prometheus + Loki）
 - 移除自定义日志系统（LogController + LogViewer），改用标准可观测性栈
-- 新增 Prometheus 指标采集（Spring Boot Actuator + Micrometer）
-- 新增 Grafana 可视化面板，预置 JVM 监控 Dashboard
-- 新增 Loki + Promtail 日志聚合，替代文件日志查看
+- 新增 Prometheus（actuator + micrometer）、Grafana（JVM Dashboard）、Loki + Promtail
 - `docker-compose.yml` 新增 4 个服务: prometheus / grafana / loki / promtail
 
-### 限流（Bucket4j 令牌桶）
-- 新增 `RateLimitFilter`，基于 IP + Token 双重限流
-- 默认 60 req/min，Chat/Agent 20 req/min，Admin 120 req/min
-- 超限返回 HTTP 429 + JSON 响应
+### 限流 + 熔断
+- 新增 `RateLimitFilter`（Bucket4j 令牌桶），默认 60/20/120 rpm
+- `AiApiClient` 内置熔断器：连续 5 次失败 → 30 秒熔断
+- 添加 Resilience4j 依赖
 
-### 熔断（AI 模型调用保护）
-- `AiApiClient` 内置熔断器：连续 5 次失败自动熔断 30 秒
-- 添加 Resilience4j 依赖，为后续服务熔断预留
+### 日志监控页面
+- `/admin/logs` 改为查询 Loki API，统计卡片 + 级别分布条形图
+- 日志级别胶囊分段按钮（红/琥珀/蓝/灰实色高亮）
+- 时间范围 15m/1h/2h/3h，5 秒自动刷新
+- Nginx `/loki/` 代理 + 24h 折线趋势图
 
-### 日志监控页面（Loki 数据源）
-- `/admin/logs` 日志监控页改为查询 Loki API，替代旧的文件日志方式
-- 统计卡片：总日志数 / ERROR / WARN / INFO / DEBUG 计数 + 错误率
-- 日志级别分布条形图，实时可视化
-- 日志级别筛选改为胶囊分段按钮，选中态实色高亮（红/琥珀/蓝/灰）
-- 时间范围切换 5m / 15m / 1h，5 秒自动刷新
-- 右上角 "Grafana →" 快捷跳转
-- Nginx 新增 `/loki/` 代理路径
+### SQL 注入 + 日志安全
+- `DocumentChunkMapper` `${topK}` → `#{topK}` 参数化
+- `StdOutImpl` → `Slf4jImpl`，生产不输出敏感 SQL
 
-### 修复
-- ES / Kafka 容器因 hostname 无法解析启动失败 → 添加固定 `hostname`
-- Kafka `CONTROLLER_QUORUM_VOTERS` 从 `localhost` 改为容器名 `kafka`
-- 消除 Spring Security `UserDetailsServiceAutoConfiguration` 启动 WARN
-- SQL 注入防护：`DocumentChunkMapper` `${topK}` 改为 `#{topK}` 参数化
-- SQL 日志：`StdOutImpl` 改为 `Slf4jImpl`，生产环境不输出敏感数据
-- 游客模式聊天不写审计日志 → 补充 `auditService.log()`，游客调用也记录
-- 运营监控"今日调用/Token消耗"始终为 0 → MySQL 时区 UTC → `Asia/Shanghai`
-- 延迟出现负值 → `System.currentTimeMillis()` 换 `System.nanoTime()`
-- 审计日志全显示"游客" → 前端 SSE 请求不带 `Authorization` header，后端从 JWT 提取 userId 并自动查 username
-- 对话列表排序错误 → `saveMessage()` 时更新 `conversation.updated_at` + 同步逐出 Redis 缓存
-- 日志监控统计数据为 0 → Loki `count_over_time` 窗口太窄 + 默认时间范围扩到 2h
-- 日志级别筛选按钮太丑 → 改实色胶囊按钮（红/琥珀/蓝/灰）
+### 审计日志修复
+- 游客模式聊天补充 `auditService.log()`
+- MySQL 时区 UTC → `Asia/Shanghai`（`CURDATE()` 修复）
+- 延迟负值：`System.currentTimeMillis()` → `System.nanoTime()`
+- 前端 SSE 不带 `Authorization` header → `useChatStream` 添加 Bearer token
+- `AuditService.log()` 自动从 userId 查 username
 
-### 测试体系
-- 新增 5 个单元测试文件，27 个用例覆盖：JwtUtil / UserServiceImpl / ConversationService / AuditService / CacheConsistencyService
-- 持久化测试容器 `aicodehub-test`，Maven 依赖缓存在 `maven-cache` 卷，全量测试 < 11 秒
-- logback-test.xml + surefire JVM 参数消除测试噪音
+### 缓存一致性
+- `RedisConfig` 新增 `RedisCacheManager` + `@EnableCaching`
+- `ConversationService` / `ModelConfigController` 热点查询加 `@Cacheable`
+- `CacheConsistencyService`：逐出失败 → 异步重试 5 次（指数退避）→ 毒化 key → 60 秒定时修复
+- `saveMessage()` 同步驱逐 `conversations_user` 缓存 + 更新 `updated_at`
 
-### Web Search 工具
-- 新增 `WebSearchTool`：基于 SerpAPI Google Search，Agent 可联网搜索实时信息
-- 返回结构化结果（标题 + 摘要 + 链接），支持自定义数量（默认5，最大10）
-- 配置 `SERPAPI_API_KEY` 环境变量启用
+### ES 混合检索 + 批量处理
+- `EmbeddingService.embedBatch()` — 一次 API 调用嵌入所有 chunks
+- `VectorStoreService.bulkIndexChunks()` — ES `_bulk` 批量索引
+- kNN → kNN+BM25 混合检索（RRF 融合）
+- 移除 `DocumentProcessor`(Kafka)，改为同步批量处理
 
-### 缓存一致性（企业级）
-- 新增 `CacheConsistencyService`：DB 写入后同步逐出 Redis，失败则异步重试 5 次（指数退避 200ms→3.2s）
-- 全部重试失败后记录毒化 key，`@Scheduled` 每 60 秒扫描恢复
-- `ConversationService.saveMessage()` 同步驱逐 `conversations_user` 缓存
+### 数据库索引
+- 9 个复合索引：`conversation.slug` UNIQUE、`message(conversation_id,created_at)` 等
 
-### 前端体验
-- Token 显示 `↑123 ↓456` 改为 `入 123　出 456`
-- 24h 调用趋势图新增小时标签（0h 3h 6h 9h 12h 15h 18h 21h）
-- 日志监控新增 2h/3h 时间范围，默认 2 小时
-- SSE 请求新增 `apiFetch` 自动续期，Access Token 过期自动用 RefreshToken 换新
+### Refresh Token + HTTPS
+- Access Token 1h + Refresh Token 7d，`POST /api/v1/auth/refresh`
+- BCrypt 哈希存储 `user.refresh_token`
+- Nginx HTTPS（TLS 1.2/1.3 + HSTS），自签证书 → `config/certs/`
+- `apiFetch` / `useChatStream` 自动续期
 
-### 会话管理（Redis 滑动会话）
-- 新增 `SessionService`：登录创建 Redis `session:{userId}`，每次请求滑动续期 1h
-- 退出登录调用 `/api/v1/auth/logout` 删除 session
-- 聊天 / Agent 请求通过 JWT `Authorization` header 续 session
-- Access Token 1h + Refresh Token 7d，`apiFetch` 和 `useChatStream` 自动续期
+### Redis 滑动会话
+- `SessionService`：登录创建 `session:{userId}`，每次请求续期 1h
+- `POST /api/v1/auth/logout` 删除 session
+- 聊天/Agent 请求通过 `Authorization` header 续 session
 
 ### 运营监控增强
-- 24h 调用趋势图改为 SVG 面积折线图 + 数值标签
-- 最近调用日志改为 MyBatis-Plus 分页（10 条/页）
-- Token 调试面板：显示 Access/Refresh 类型、过期时间（去重头部，仅末 20 位）
-- `MyBatisPlusConfig` 新增分页插件（`PaginationInnerInterceptor`）
+- 24h 趋势图改为 SVG 面积折线图 + 数值标签
+- 最近调用日志分页（10 条/页），`MyBatisPlusConfig` 分页插件
+- Token 调试面板（类型、过期时间、去重头部仅末 20 位）
+- Metric 卡片颜色改为完整 Tailwind 类名
 
-### 时区统一
-- 全部 Docker 容器添加 `TZ: Asia/Shanghai`
-- MySQL `--default-time-zone='+08:00'`，`CURDATE()` 正确返回北京时间
+### 时区 + 测试 + Web Search
+- 全部 Docker 容器 `TZ: Asia/Shanghai`，MySQL `--default-time-zone='+08:00'`
+- 27 个单元测试（JwtUtil / UserServiceImpl / ConversationService / AuditService / CacheConsistencyService）
+- 持久化测试容器 `aicodehub-test`，全量 < 11 秒
+- `WebSearchTool`（SerpAPI Google Search）
+
+### 记忆系统（三层架构 + 双压缩策略 + 三维度检索）
+- **三层架构**：短期记忆（token 预算）、长期记忆（ES 向量检索）、外部记忆（RAG 文档）
+- **Map-Reduce 压缩**：旧消息分片→每片 AI 摘要→合并为精炼要点，写入 ES
+- **ConversationHistory 压缩**：保留 system + 最近 3 轮 user（不切断 tool_call 对），中间压缩为摘要
+- **Agent 主动存**：`save_memory` 工具，用户说"记住..."时 Agent 自动调用，标记 source="agent"
+- **Agent 主动检索**：`search_memory` 工具，按语义查找已保存的记忆
+- **三维度评分检索**：`MemoryEntry.combinedScore()` — keyword(0.4) + time(0.3) + source(0.3)
+- 记忆注入 system prompt（不混入 user message），标注来源 `[主动记忆]` / `[历史摘要]`
+
+### Multi-Agent（CrewAI 风格）
+- 新增 `CrewOrchestrator`：架构师拆分→开发者并行→审查者汇总
+- `AgentRole` + `AgentWorker` + `CrewController`：角色定义、单 Agent 执行
+- WebSocket 集成 `handleCrew`，过滤空行和标号前缀
+- 聊天界面 "🤖 多Agent" 开关，Agent 模式下可见
+
+### SSE → WebSocket 全双工通信
+- 新增 `spring-boot-starter-websocket`，`WebSocketConfig` + `WebSocketAuthInterceptor`
+- `ChatWebSocketHandler` 统一处理 chat/agent/crew 三种模式
+- JwtAuthFilter 同时支持 Header `Bearer` 和 Query `?token=` 两种传 token
+- Nginx `/ws/` 代理（HTTP 3080 + HTTPS 443），`proxy_read_timeout 3600s`
+- 前端 `useWebSocket`：指数退避重连（1s→30s）+ 30s 心跳 + 60s 超时检测
+- 替换 `useChatStream`（SSE），打字机效果不变
+
+### Agent Runtime（任务调度）
+- 新增 `agent_task` 表 + `AgentTask` 实体 + `AgentTaskService` + `AgentTaskExecutor`
+- `POST /api/v1/tasks` 提交后台任务，线程池异步执行，状态追踪 pending→running→done/failed
+- 前端 `/copilot/tasks` 任务中心：提交表单 + 实时列表 + 结果查看
+- Copilot 页面 Runtime 卡片上线可点击
+
+### Token 分析
+- `audit_log` 新增 `token_breakdown` JSON 字段，记录 user_prompt / system_prompt / memory_context / history / output
+- `breakdownJson()` 在 chat/agent 模式下自动采集各阶段 token
+- 前端 `/admin/tokens` Token 分析页：消耗分布条形图 + 分页明细表
+- 管理后台导航新增 "Token 分析" 入口
+
+### 压缩优化
+- `MemoryService.buildContext()` 改为 token 预算触发压缩（历史对话超过预算 80% 自动压缩）
+- 从消息条数阈值（20条）改为 token 占比阈值，更精准
+
+### 图表优化
+- 24h 趋势图：纵轴从 0 起始 + 6 等分标注 + 两小时区间聚合 + 数值标签移到时间轴下方
+- Copilot 核心能力卡片全部上线可点击（RAG / Runtime / Workflow 可跳转）
 
 ### 文档
-- 新增 `docs/PRODUCTION.md` — 开发 vs 生产差异清单（7 个维度，含快速 Checklist）
-- ROADMAP 同步更新
+- `docs/*.png` 重命名为英文：`admin-panel.png` / `knowledge-base-design.png` / `copilot-workspace.png` / `chat.png`
+- 管理后台支持亮色主题切换
 
-### 安全：Refresh Token 双令牌机制
-- Access Token 15分钟 + Refresh Token 7天
-- 登录返回 `token` + `refreshToken`，前端使用 refreshToken 换取新 accessToken
-- `POST /api/v1/auth/refresh` 新增刷新端点
-- Refresh Token BCrypt 哈希后存储到 `user.refresh_token` 字段
-- 使用 JWT `type` claim 区分 access/refresh，防止混用
+### 文档 + 杂项
+- 新增 `docs/PRODUCTION.md`（7 维度生产清单）
+- 对话标题过滤 Markdown 符号（`##✅` → `今日收获`）
+- Token 显示 `↑↓` → `入/出`，前端未登录自动弹框，旧格式 token 自动清除
+- `.gitignore` 添加 `minio-data/`、`es-data/` 等数据卷
+- 全部 Docker 容器统一 `TZ: Asia/Shanghai`
 
-### 性能优化：Redis 缓存
-- `RedisConfig` 新增 `RedisCacheManager`，`@EnableCaching` 启用 Spring Cache
-- `ConversationService.getById()` / `getContext()` / `listByUser()` 添加 `@Cacheable`
-- `ModelConfigController` list/create/update/delete 添加缓存注解
-- 缓存 TTL: conversation 30min / messages 5min / model_configs 30min
-- 新消息插入时自动 `@CacheEvict` 驱逐对应缓存
-
-### 性能优化：ES 混合检索 + 批量处理
-- `EmbeddingService` 新增 `embedBatch()` — 一次 API 调用嵌入所有 chunks
-- `VectorStoreService` 新增 `bulkIndexChunks()` — ES `_bulk` API 批量索引
-- 搜索从纯 kNN 升级为 kNN+BM25 混合检索（RRF 融合，`rank_constant=60`）
-- 修复双重索引 bug：`DocumentService.upload()` 移除重复的逐 chunk 索引
-- 移除 `DocumentProcessor`(Kafka 消费者)，文档处理改为同步批量
-- 上传文档：分块 → 批量 Embedding(1次API) → 批量 ES(1次bulk)
-
-### 性能优化：数据库索引
-- `conversation` 新增 `uk_slug` UNIQUE + `idx_user_updated(user_id, updated_at)`
-- `message` 新增 `idx_conv_created(conversation_id, created_at)`
-- `user` 新增 `idx_user_role_created(role, created_at)`
-- `document` 新增 `idx_doc_user_created(user_id, created_at)`
-- `audit_log` 新增 `idx_status_created(status, created_at)`
-- `model_config` 新增 `idx_mc_user_updated` + `idx_mc_user_provider`
-- `workflow` 新增 `idx_wf_user_updated(user_id, updated_at)`
-- 共 9 个索引，覆盖所有高频 WHERE + ORDER BY 查询
-
-### 高并发 & 性能优化
-- HikariCP 连接池调优：max 20 / min-idle 5 / 泄漏检测 60s
-- Tomcat 线程池：max 200 / min-spare 10 / accept 100
-- Lettuce Redis 连接池增强：max-active 16 / min-idle 4 / max-wait 3s
-- JVM 调优：G1GC / 256m-512m / MaxGCPauseMillis=200ms
-- Nginx 增强：IP 限流 10r/s burst 20、连接数限制 20、安全响应头、body size 50m
-
-### 对话 URL 优化
-- 对话 URL 从 `/chat/1` 改为 `/chat/a3f2c8e1`（8 位 UUID 随机短码）
-- `conversation` 表新增 `slug` 字段，创建时自动生成
-- 侧边栏点击、新建对话、URL 分享均使用 slug
-- 顶部 `AI-CodeHub` Logo 点击回到 `/chat` 新建页
-
-### 表格渲染优化
-- 圆角容器 + 隔行斑马纹 + 大写表头 + 柔和分隔线
-- 反引号全部移除，纯文本显示
-
-### 用户头像
-- 侧边栏底部显示用户头像+用户名，点击弹出编辑弹窗
-- 支持 20 个 emoji 头像选择 + 本地上传图片
-- 上传图片存入 MinIO `images` 公开桶，nginx 代理 `/minio/` 路径
-- 登录接口返回头像字段，authStore 持久化到 localStorage
-
-### Spring Security RBAC
-- `JwtAuthFilter` 替代 `AuthInterceptor`，`OncePerRequestFilter` + `SecurityContextHolder`
-- `@EnableMethodSecurity` + `@PreAuthorize` 替代 `@RequireRole`
-- 三角色：admin / test / user（注册默认 user，审核可升级 test）
-- 6 个权限点 + role_permission 映射，DataInitializer 启动自动写入
-- 权限矩阵：admin 全权限 / test 含工作流+模型配置 / user 含知识库+文档预览
-
-### MCP STDIO 客户端
-- `McpClient` 实现 JSON-RPC 2.0 over STDIO 协议通信
-- 后端 Docker 镜像预装 Node.js + `@modelcontextprotocol/server-filesystem`
-- `McpTool` 注册为 Agent 工具，连接后获得 14 个文件操作能力
-- 旧 `FileSystemTool` 已移除，统一走 MCP
-- `MCP_COMMAND` 环境变量配置
-
-### 修复
-- RBAC 改造后 `UserContext` 未设置导致 API 返回空数据 — `JwtAuthFilter` 补上 `UserContext.set()`
-- MCP 连接超时 — `sendRpc` 轮询等待 60 秒 + 首次 npx 下载异步化
-- Agent 工具参数类型转换 — String → Map JSON 解析
+### 性能优化汇总
+- HikariCP max 20 / min-idle 5、Tomcat max 200、Lettuce max-active 16
+- JVM G1GC 256m-512m、Nginx IP 限流 + 连接数限制 + 安全头
 
 ## 2026-05-30
 
@@ -185,11 +187,8 @@
 - 文档预览模态框，分页展示内容
 
 ### 权限系统
-- JWT + BCrypt 无状态鉴权
-- admin / beta / user / applicant 四角色（后简化为 admin / user / test）
-- 注册审核流程：注册 → pending → 管理员 approve/reject → active
-- 运营监控大盘：调用量/活跃用户/Token消耗/延迟/错误率/24h趋势/模型分布
-- audit_log 表记录每次 API 调用
+- JWT + BCrypt 无状态鉴权，admin / beta / user / applicant 四角色
+- 注册审核流程，运营监控大盘，audit_log 表
 
 ### 对话管理
 - 侧边栏对话列表，支持搜索、重命名、删除

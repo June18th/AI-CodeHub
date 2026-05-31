@@ -181,6 +181,35 @@ Agent 模式下可调用 6 个工具：计算器 / 日期时间 / 天气查询 /
 - 24h 调用趋势图 + 模型用量分布
 - 最近调用日志表
 
+## 配置管理
+
+### 模型配置管理
+- `/model-config` 页面，CRUD + 设为默认
+- `model_config` 表存储供应商/API地址/密钥/模型/温度/能力标签
+- 工作流 LLM 节点可选择已存配置或手动输入
+
+## 项目截图
+
+### 对话界面
+多模型流式对话 · Agent 工具调用 · Markdown 渲染 · Token 统计
+
+![chat](docs/chat.png)
+
+### Copilot 工作台
+Agent 核心能力总览 · 快速入口 · 工作流编辑器 · 任务中心
+
+![copilot](docs/copilot-workspace.png)
+
+### 运营管理平台
+调用量/Token 消耗/延迟/错误率监控 · 24h 趋势图 · 用户审核 · 日志监控 · Token 分析
+
+![admin](docs/admin-panel.png)
+
+### 知识库设计
+文档上传 · 向量化 · ES 语义检索 · RAG 增强
+
+![knowledge-base](docs/knowledge-base-design.png)
+
 ## Nginx 配置
 
 ```nginx
@@ -199,3 +228,20 @@ location ^~ /minio/ {
     proxy_pass http://minio:9000/;
 }
 ```
+
+## 能力总览
+
+AI-CodeHub 是一套完整的 AI 应用平台，覆盖从基础设施到业务体验的完整链路：
+
+- **对话层**：WebSocket 全双工流式对话，支持 5 个模型供应商，Markdown 渲染 + Token 统计
+- **Agent 层**：ReAct 决策循环 + 12 个内置工具 + CrewAI 多 Agent 协作 + 后台任务异步执行
+- **知识层**：RAG 检索增强（千问 Embedding + ES 混合检索）+ 三层记忆系统（短期/长期/外部）
+- **工作流层**：React Flow 可视化 DAG 编排 + 拓扑排序 + 并行节点执行
+- **运营层**：Grafana + Prometheus + Loki 全栈监控 + Token 分析 + 调用日志分页审计
+- **安全层**：HTTPS + Spring Security RBAC + JWT 双令牌 + Redis 滑动会话 + Bucket4j 限流 + 熔断
+- **数据层**：MySQL + Redis + ES + Kafka + MinIO，9 个复合索引 + Redis 缓存 + 企业级缓存一致性
+- **测试层**：JUnit 5 + Mockito 单元测试（27 个用例），持久化测试容器，全量 < 11 秒
+
+Docker Compose 一键部署，从 `docker compose up -d` 到可用只需一条命令。
+
+详细更新记录见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)，规划路线见 [`docs/ROADMAP.md`](docs/ROADMAP.md)，生产升级清单见 [`docs/PRODUCTION.md`](docs/PRODUCTION.md)。

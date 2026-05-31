@@ -24,6 +24,7 @@ public class DocumentService {
     @PostConstruct
     public void init() {
         vectorStore.ensureIndex();
+        vectorStore.ensureSummaryIndex();
     }
 
     public Document upload(Long userId, String filename, String fileType, String content) {
