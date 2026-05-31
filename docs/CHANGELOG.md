@@ -41,6 +41,16 @@
 - 日志监控统计数据为 0 → Loki `count_over_time` 窗口太窄 + 默认时间范围扩到 2h
 - 日志级别筛选按钮太丑 → 改实色胶囊按钮（红/琥珀/蓝/灰）
 
+### 测试体系
+- 新增 5 个单元测试文件，27 个用例覆盖：JwtUtil / UserServiceImpl / ConversationService / AuditService / CacheConsistencyService
+- 持久化测试容器 `aicodehub-test`，Maven 依赖缓存在 `maven-cache` 卷，全量测试 < 11 秒
+- logback-test.xml + surefire JVM 参数消除测试噪音
+
+### Web Search 工具
+- 新增 `WebSearchTool`：基于 SerpAPI Google Search，Agent 可联网搜索实时信息
+- 返回结构化结果（标题 + 摘要 + 链接），支持自定义数量（默认5，最大10）
+- 配置 `SERPAPI_API_KEY` 环境变量启用
+
 ### 缓存一致性（企业级）
 - 新增 `CacheConsistencyService`：DB 写入后同步逐出 Redis，失败则异步重试 5 次（指数退避 200ms→3.2s）
 - 全部重试失败后记录毒化 key，`@Scheduled` 每 60 秒扫描恢复
@@ -51,6 +61,26 @@
 - 24h 调用趋势图新增小时标签（0h 3h 6h 9h 12h 15h 18h 21h）
 - 日志监控新增 2h/3h 时间范围，默认 2 小时
 - SSE 请求新增 `apiFetch` 自动续期，Access Token 过期自动用 RefreshToken 换新
+
+### 会话管理（Redis 滑动会话）
+- 新增 `SessionService`：登录创建 Redis `session:{userId}`，每次请求滑动续期 1h
+- 退出登录调用 `/api/v1/auth/logout` 删除 session
+- 聊天 / Agent 请求通过 JWT `Authorization` header 续 session
+- Access Token 1h + Refresh Token 7d，`apiFetch` 和 `useChatStream` 自动续期
+
+### 运营监控增强
+- 24h 调用趋势图改为 SVG 面积折线图 + 数值标签
+- 最近调用日志改为 MyBatis-Plus 分页（10 条/页）
+- Token 调试面板：显示 Access/Refresh 类型、过期时间（去重头部，仅末 20 位）
+- `MyBatisPlusConfig` 新增分页插件（`PaginationInnerInterceptor`）
+
+### 时区统一
+- 全部 Docker 容器添加 `TZ: Asia/Shanghai`
+- MySQL `--default-time-zone='+08:00'`，`CURDATE()` 正确返回北京时间
+
+### 文档
+- 新增 `docs/PRODUCTION.md` — 开发 vs 生产差异清单（7 个维度，含快速 Checklist）
+- ROADMAP 同步更新
 
 ### 安全：Refresh Token 双令牌机制
 - Access Token 15分钟 + Refresh Token 7天

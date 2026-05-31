@@ -1,5 +1,56 @@
 import { useCallback, useRef } from 'react';
 
+function jwtExp(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 < Date.now();
+  } catch { return true; }
+}
+
+async function getValidToken(): Promise<string | null> {
+  const saved = JSON.parse(localStorage.getItem('aicodehub-auth') || '{}');
+  if (!saved.token) return null;
+  if (!jwtExp(saved.token)) return saved.token;
+  // Token expired, try refresh
+  if (!saved.refreshToken) return null;
+  const rr = await fetch('/api/v1/auth/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: saved.refreshToken }),
+  });
+  if (rr.ok) {
+    const data = await rr.json();
+    saved.token = data.data.token;
+    localStorage.setItem('aicodehub-auth', JSON.stringify(saved));
+    return data.data.token;
+  }
+  return null;
+}
+
+async function fetchWithRefresh(url: string, init: RequestInit): Promise<Response> {
+  const token = await getValidToken();
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  let res = await fetch(url, { ...init, headers });
+  if (res.status === 401) {
+    // Fallback: try refresh again if server rejects
+    const saved = JSON.parse(localStorage.getItem('aicodehub-auth') || '{}');
+    if (saved.refreshToken) {
+      const rr = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: saved.refreshToken }),
+      });
+      if (rr.ok) {
+        const data = await rr.json();
+        saved.token = data.data.token;
+        localStorage.setItem('aicodehub-auth', JSON.stringify(saved));
+        res = await fetch(url, { ...init, headers });
+      }
+    }
+  }
+  return res;
+}
+
 export function useChatStream() {
   const abortRef = useRef<AbortController | null>(null);
 
@@ -15,12 +66,7 @@ export function useChatStream() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      let headers: Record<string, string> = {};
-      try {
-        const saved = JSON.parse(localStorage.getItem('aicodehub-auth') || '{}');
-        if (saved.token) headers['Authorization'] = `Bearer ${saved.token}`;
-      } catch {}
-      fetch(url, { signal: controller.signal, headers })
+      fetchWithRefresh(url, { signal: controller.signal })
         .then(async (response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const reader = response.body?.getReader();

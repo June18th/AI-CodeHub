@@ -28,12 +28,17 @@ public class ChatController {
     private final ConversationService conversationService;
     private final com.aicodehub.service.AuditService auditService;
     private final com.aicodehub.common.JwtUtil jwtUtil;
+    private final com.aicodehub.service.SessionService sessionService;
 
     private Long resolveUserId(String authHeader) {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             try {
                 String token = authHeader.substring(7);
-                if (jwtUtil.validate(token)) return jwtUtil.getUserId(token);
+                if (jwtUtil.validate(token)) {
+                    Long uid = jwtUtil.getUserId(token);
+                    try { sessionService.extend(uid); } catch (Exception ignored) {}
+                    return uid;
+                }
             } catch (Exception ignored) {}
         }
         return null;

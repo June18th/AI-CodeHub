@@ -1,6 +1,7 @@
 package com.aicodehub.controller;
 
 import com.aicodehub.common.Result;
+import com.aicodehub.common.UserContext;
 import com.aicodehub.common.dto.LoginRequest;
 import com.aicodehub.common.dto.RegisterRequest;
 import com.aicodehub.service.UserService;
@@ -29,5 +30,11 @@ public class AuthController {
     @PostMapping("/refresh")
     public Result<?> refresh(@RequestBody java.util.Map<String, String> body) {
         return Result.ok(userService.refreshAccessToken(body.get("refreshToken")));
+    }
+
+    @PostMapping("/logout")
+    public Result<?> logout() {
+        userService.logout(UserContext.getUserId());
+        return Result.ok();
     }
 }

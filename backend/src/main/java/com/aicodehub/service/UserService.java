@@ -14,4 +14,5 @@ public interface UserService {
     Page<User> listApplications(int page, int size);
     void review(ReviewRequest req, Long reviewerId);
     Map<String, String> refreshAccessToken(String rawRefreshToken);
+    void logout(Long userId);
 }

@@ -191,6 +191,7 @@ export default function ChatInterface() {
 
   useEffect(() => { const id = setInterval(() => setClock(fmtClock()), 1000); return () => clearInterval(id); }, []);
   useEffect(() => { (window as any).__openLoginModal = () => setModalOpen(true); return () => { delete (window as any).__openLoginModal; }; }, []);
+  useEffect(() => { const t = setTimeout(() => { if (!isLoggedIn) setModalOpen(true); }, 300); return () => clearTimeout(t); }, [isLoggedIn]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages]);
 
   // Resolve slug to conversation ID

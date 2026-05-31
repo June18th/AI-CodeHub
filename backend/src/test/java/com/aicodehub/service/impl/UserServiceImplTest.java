@@ -22,13 +22,15 @@ class UserServiceImplTest {
 
     private UserMapper userMapper;
     private JwtUtil jwtUtil;
+    private com.aicodehub.service.SessionService sessionService;
     private UserServiceImpl userService;
 
     @BeforeEach
     void setUp() {
         userMapper = mock(UserMapper.class);
+        sessionService = mock(com.aicodehub.service.SessionService.class);
         jwtUtil = new JwtUtil("test-key-256-bits-minimum-32chars!", 900_000, 604_800_000);
-        userService = new UserServiceImpl(userMapper, jwtUtil);
+        userService = new UserServiceImpl(userMapper, jwtUtil, sessionService);
     }
 
     @Test

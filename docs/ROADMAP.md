@@ -47,9 +47,9 @@
 
 - **Multi-Agent 协作** — 多 Agent 并行执行 + 结果投票/合并
 - **Long-term Memory** — 向量化记忆存储 + 语义检索召回
-- **Web Search 工具** — SerpAPI / Bing Search API 联网搜索
-- **Code Interpreter** — 沙箱化 Python/Node 代码执行
 - [x] ~~MCP STDIO 客户端（JSON-RPC over STDIO + filesystem 工具）~~ → 已完成
+- [x] ~~Web Search 工具（SerpAPI 联网搜索，返回标题+摘要+链接）~~ → 已完成
+- **Code Interpreter** — 沙箱化 Python/Node 代码执行
 
 ---
 
@@ -57,9 +57,14 @@
 
 - [x] ~~Grafana + Prometheus + Loki + Promtail 全栈监控~~ → 已完成
 - [x] ~~JVM 指标仪表盘 + 日志聚合检索~~ → 已完成
+- [x] ~~运营监控分页 + 折线趋势图~~ → 已完成
 - [ ] **告警通知** — 钉钉/飞书 Webhook 推送异常告警
 - [ ] **用量计费** — Token 用量统计 + 用户配额管理
 - [ ] **A/B 测试** — 模型效果对比实验
+
+---
+
+> 📋 生产环境升级清单参见 [`docs/PRODUCTION.md`](PRODUCTION.md)
 
 ---
 

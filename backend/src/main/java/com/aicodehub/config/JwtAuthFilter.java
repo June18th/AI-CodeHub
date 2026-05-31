@@ -22,6 +22,7 @@ import java.util.Map;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final com.aicodehub.service.SessionService sessionService;
     private final ObjectMapper mapper = new ObjectMapper();
 
     private static final List<String> PUBLIC_PATHS = List.of(
@@ -56,6 +57,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
         );
 
+        if (!sessionService.isValid(userId)) {
+            writeError(response, 401, "会话已过期，请重新登录");
+            return;
+        }
+        sessionService.extend(userId);
         UserContext.set(userId, role);
 
         UsernamePasswordAuthenticationToken authentication =

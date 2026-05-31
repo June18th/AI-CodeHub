@@ -23,12 +23,24 @@ public class AgentController {
     private final FunctionCallHandler functionCallHandler;
     private final ConversationService conversationService;
     private final com.aicodehub.service.AuditService auditService;
+    private final com.aicodehub.common.JwtUtil jwtUtil;
+    private final com.aicodehub.service.SessionService sessionService;
 
     @GetMapping("/chat")
     public SseEmitter agentChat(@RequestParam String prompt,
                                 @RequestParam(defaultValue = "deepseek") String modelType,
-                                @RequestParam(required = false) Long conversationId) {
+                                @RequestParam(required = false) Long conversationId,
+                                @RequestHeader(value = "Authorization", required = false) String auth) {
         SseEmitter emitter = SseEmitterHelper.createEmitter(180_000L);
+        if (auth != null && auth.startsWith("Bearer ")) {
+            try {
+                String token = auth.substring(7);
+                if (jwtUtil.validate(token)) {
+                    Long uid = jwtUtil.getUserId(token);
+                    try { sessionService.extend(uid); } catch (Exception ignored) {}
+                }
+            } catch (Exception ignored) {}
+        }
         SseSaveWrapper wrapper = new SseSaveWrapper(emitter);
 
         List<Map<String, String>> messages = new ArrayList<>();

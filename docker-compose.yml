@@ -27,6 +27,8 @@ services:
     image: redis:7-alpine
     container_name: aicodehub-redis
     restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
     command: redis-server --requirepass ${REDIS_PASSWORD:-redis123} --appendonly yes
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -46,6 +48,7 @@ services:
     hostname: elasticsearch
     restart: unless-stopped
     environment:
+      TZ: Asia/Shanghai
       discovery.type: single-node
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
@@ -67,6 +70,7 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
+      TZ: Asia/Shanghai
       MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minioadmin123}
     ports:
@@ -83,6 +87,7 @@ services:
     hostname: kafka
     restart: unless-stopped
     environment:
+      TZ: Asia/Shanghai
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
       KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
@@ -110,6 +115,7 @@ services:
       - ./:/workspace
       - backend-logs:/app/logs
     environment:
+      TZ: Asia/Shanghai
       SPRING_PROFILES_ACTIVE: docker
       FILESYSTEM_ROOT: /workspace
       DB_HOST: mysql
@@ -145,6 +151,7 @@ services:
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v4}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-2048}
+      SERPAPI_API_KEY: ${SERPAPI_API_KEY:-}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     depends_on:
@@ -161,6 +168,8 @@ services:
       dockerfile: Dockerfile
     container_name: aicodehub-frontend
     restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
     ports:
       - "${FRONTEND_PORT:-3000}:443"
       - "3080:80"
@@ -175,6 +184,8 @@ services:
     image: prom/prometheus:v2.51.0
     container_name: aicodehub-prometheus
     restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -190,6 +201,7 @@ services:
     container_name: aicodehub-grafana
     restart: unless-stopped
     environment:
+      TZ: Asia/Shanghai
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
@@ -208,6 +220,8 @@ services:
     image: grafana/loki:2.9.0
     container_name: aicodehub-loki
     restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
       - ./config/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
@@ -219,6 +233,8 @@ services:
     image: grafana/promtail:2.9.0
     container_name: aicodehub-promtail
     restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
     command: -config.file=/etc/promtail/promtail-config.yml
     volumes:
       - ./config/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro

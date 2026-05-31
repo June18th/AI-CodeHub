@@ -97,7 +97,7 @@ logging:
 
 jwt:
   secret: ${JWT_SECRET:ai-codehub-2026-jwt-secret-key-min-256-bits!!}
-  expiration: 900000
+  expiration: 3600000
   refresh-expiration: 604800000
 
 # ---- Management & Observability ----

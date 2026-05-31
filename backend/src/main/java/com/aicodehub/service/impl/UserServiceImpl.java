@@ -22,6 +22,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
+    private final com.aicodehub.service.SessionService sessionService;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
     @Override
@@ -38,6 +39,7 @@ public class UserServiceImpl implements UserService {
         String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getRole());
         user.setRefreshToken(encoder.encode(refreshToken));
         userMapper.updateById(user);
+        sessionService.create(user.getId());
         return Map.of("token", accessToken, "refreshToken", refreshToken,
             "role", user.getRole(), "username", user.getUsername(),
             "avatar", user.getAvatar() != null ? user.getAvatar() : "");
@@ -108,6 +110,12 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("刷新令牌验证失败");
         }
         String newAccess = jwtUtil.generate(userId, role);
+        sessionService.extend(userId);
         return Map.of("token", newAccess, "role", role);
+    }
+
+    @Override
+    public void logout(Long userId) {
+        sessionService.destroy(userId);
     }
 }

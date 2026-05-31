@@ -46,8 +46,7 @@ public class AuditService {
             "avgLatency", orZero(mapper.avgLatency()),
             "errorRate", calls > 0 ? Math.round(errors * 10000.0 / calls) / 100.0 : 0,
             "modelUsage", mapper.modelUsage24h(),
-            "hourlyTrend", mapper.hourlyTrend(),
-            "recentLogs", mapper.recentLogs(20)
+            "hourlyTrend", mapper.hourlyTrend()
         );
     }
 

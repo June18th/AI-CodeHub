@@ -17,6 +17,8 @@ export default function AdminPanel() {
   const [tab, setTab] = useState<'dashboard' | 'review'>('dashboard');
   const [apps, setApps] = useState<Application[]>([]);
   const [dash, setDash] = useState<Dashboard | null>(null);
+  const [logPage, setLogPage] = useState(1);
+  const [logData, setLogData] = useState<{ records: any[]; total: number; pages: number }>({ records: [], total: 0, pages: 0 });
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
 
@@ -31,7 +33,13 @@ export default function AdminPanel() {
       .then((r) => r.json()).then((d) => { if (d.code === 200) setDash(d.data); });
   };
 
+  const fetchLogs = (page: number) => {
+    fetch(`/api/v1/dashboard/logs?page=${page}&size=10`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => { if (d.code === 200) setLogData(d.data); });
+  };
+
   useEffect(() => { fetchApps(); fetchDashboard(); }, []);
+  useEffect(() => { fetchLogs(logPage); }, [logPage]);
 
   const review = (userId: number, action: string, role?: string) => {
     fetch('/api/v1/admin/review', {
@@ -47,6 +55,13 @@ export default function AdminPanel() {
   const fmt = (n: number) => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
 
   const barMax = Math.max(1, ...(dash?.hourlyTrend.map((h) => h.cnt) ?? [1]));
+
+  // Token debug info
+  const auth = JSON.parse(localStorage.getItem('aicodehub-auth') || '{}');
+  const atPayload = (() => { try { return JSON.parse(atob(auth.token?.split('.')[1]||'{}')); } catch { return {}; } })();
+  const rtPayload = (() => { try { return JSON.parse(atob(auth.refreshToken?.split('.')[1]||'{}')); } catch { return {}; } })();
+  const atExp = (() => { try { return new Date(atPayload.exp*1000).toLocaleString('zh-CN'); } catch { return '-'; } })();
+  const rtExp = (() => { try { return new Date(rtPayload.exp*1000).toLocaleString('zh-CN'); } catch { return '-'; } })();
 
   return (
     <div className="flex flex-col h-screen bg-[#0b0f14]">
@@ -84,40 +99,64 @@ export default function AdminPanel() {
               {/* Metric cards */}
               <div className="grid grid-cols-4 gap-4">
                 {[
-                  { label: '今日调用', value: fmt(dash.todayCalls), color: 'blue' },
-                  { label: '活跃用户', value: dash.activeUsers, color: 'emerald' },
-                  { label: 'Token 消耗', value: fmt(dash.todayTokens), color: 'violet' },
-                  { label: '平均延迟', value: dash.avgLatency + 'ms', color: 'amber' },
+                  { label: '今日调用', value: fmt(dash.todayCalls), cls: 'text-sky-400' },
+                  { label: '活跃用户', value: dash.activeUsers, cls: 'text-emerald-400' },
+                  { label: 'Token 消耗', value: fmt(dash.todayTokens), cls: 'text-violet-400' },
+                  { label: '平均延迟', value: dash.avgLatency + 'ms', cls: 'text-amber-400' },
                 ].map((m) => (
                   <div key={m.label} className="rounded-2xl border border-slate-700/30 bg-slate-900/60 p-5">
-                    <p className="text-[12px] text-slate-500 mb-2">{m.label}</p>
-                    <p className={`text-2xl font-bold text-${m.color}-400`}>{m.value}</p>
+                    <p className="text-[12px] text-slate-400 mb-2">{m.label}</p>
+                    <p className={`text-2xl font-bold ${m.cls}`}>{m.value}</p>
                   </div>
                 ))}
               </div>
+
+              {/* Token debug info */}
+              {auth.token && (
+                <div className="rounded-2xl border border-slate-700/30 bg-slate-900/60 p-4">
+                  <div className="grid grid-cols-4 gap-4 text-xs">
+                    <div><span className="text-slate-500">Access <span className="text-amber-400">[{atPayload.type||'?'}]</span></span><p className="text-amber-400 font-mono mt-0.5">…{auth.token?.split('.').slice(1).join('.').slice(-20)||'-'}</p><p className="text-amber-400/70 mt-0.5">过期 {atExp}</p></div>
+                    <div><span className="text-slate-500">Refresh <span className="text-emerald-400">[{rtPayload.type||'?'}]</span></span><p className="text-emerald-400 font-mono mt-0.5">…{auth.refreshToken?.split('.').slice(1).join('.').slice(-20)||'-'}</p><p className="text-emerald-400/70 mt-0.5">过期 {rtExp}</p></div>
+                    <div><span className="text-slate-500">Role</span><p className="text-slate-300 mt-0.5">{auth.role||'-'} / {auth.username||'-'}</p></div>
+                    <div><span className="text-slate-500">Session Redis</span><p className="text-slate-300 mt-0.5">Active</p></div>
+                  </div>
+                </div>
+              )}
 
               {/* Charts row */}
               <div className="grid grid-cols-2 gap-4">
                 {/* Hourly trend */}
                 <div className="rounded-2xl border border-slate-700/30 bg-slate-900/60 p-5">
                   <h3 className="text-sm font-semibold text-slate-300 mb-4">24h 调用趋势</h3>
-                  <div className="flex items-end gap-[2px] h-28">
-                    {Array.from({ length: 24 }, (_, i) => {
-                      const h = dash.hourlyTrend.find((ht) => ht.hour === i);
-                      const hh = h ? h.cnt : 0;
-                      return (
-                        <div key={i} className="flex-1 flex flex-col justify-end items-center gap-0.5">
-                          <span className="text-[9px] text-slate-500">{hh || ''}</span>
-                          <div className="w-full rounded-sm bg-blue-500/60 hover:bg-blue-400 transition-colors"
-                               style={{ height: `${Math.max(4, (hh / barMax) * 100)}%` }} />
-                        </div>
-                      );
+                  <svg viewBox="0 0 360 120" className="w-full h-32" preserveAspectRatio="none">
+                    {/* Grid lines */}
+                    {[20,40,60,80].map(y => <line key={y} x1="0" y1={110-y} x2="360" y2={110-y} stroke="#334155" strokeWidth="0.5"/>) }
+                    {/* Area fill */}
+                    <path d={(() => {
+                      const pts = Array.from({length:24},(_,i)=>({x:(i+0.5)/24*360,y:110-((dash.hourlyTrend.find(h=>h.hour===i)?.cnt||0)/barMax*100)}));
+                      if (pts.every(p=>p.y===110)) return '';
+                      let d=`M${pts[0].x},110`;
+                      pts.forEach(p=>d+=` L${p.x},${p.y}`);
+                      d+=` L${pts[23].x},110 Z`;
+                      return d;
+                    })()} fill="url(#chartGrad)" opacity="0.3"/>
+                    {/* Line */}
+                    <polyline fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinejoin="round"
+                      points={Array.from({length:24},(_,i)=>{
+                        const v=dash.hourlyTrend.find(h=>h.hour===i)?.cnt||0;
+                        return `${(i+0.5)/24*360},${110-(v/barMax*100)}`;
+                      }).join(' ')} />
+                    {/* Value labels */}
+                    {Array.from({length:24},(_,i)=>{
+                      const v=dash.hourlyTrend.find(h=>h.hour===i)?.cnt||0;
+                      if (v===0) return null;
+                      return <text key={i} x={(i+0.5)/24*360} y={104-(v/barMax*100)} textAnchor="middle" fill="#94a3b8" fontSize="8">{v}</text>;
                     })}
-                  </div>
-                  <div className="flex gap-[2px] mt-1">
-                    {[0,3,6,9,12,15,18,21].map(h => (
-                      <div key={h} className="flex-1 text-[8px] text-slate-600 text-center">{h}h</div>
-                    ))}
+                    <defs><linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6"/><stop offset="100%" stopColor="#3b82f6" stopOpacity="0"/></linearGradient></defs>
+                  </svg>
+                  {/* Hour labels */}
+                  <div className="flex justify-between mt-1">
+                    {[0,2,4,6,8,10,12,14,16,18,20,22].map(h => <span key={h} className="text-[8px] text-slate-600">{h}h</span>)}
                   </div>
                 </div>
 
@@ -145,8 +184,9 @@ export default function AdminPanel() {
 
               {/* Recent logs */}
               <div className="rounded-2xl border border-slate-700/30 bg-slate-900/60 overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-700/30">
+                <div className="px-5 py-3 border-b border-slate-700/30 flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-slate-300">最近调用日志</h3>
+                  <span className="text-xs text-slate-500">共 {logData.total} 条</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-[13px]">
@@ -161,7 +201,7 @@ export default function AdminPanel() {
                       </tr>
                     </thead>
                     <tbody>
-                      {dash.recentLogs.map((l) => (
+                      {logData.records.map((l: any) => (
                         <tr key={l.id} className="border-b border-slate-800/50">
                           <td className="px-5 py-2.5 text-slate-300">{l.username || '游客'}</td>
                           <td className="px-5 py-2.5 text-slate-400">{l.model}</td>
@@ -178,6 +218,16 @@ export default function AdminPanel() {
                     </tbody>
                   </table>
                 </div>
+                {/* Pagination */}
+                {logData.pages > 1 && (
+                  <div className="flex items-center justify-center gap-2 px-5 py-3 border-t border-slate-700/30">
+                    <button onClick={() => setLogPage(p => Math.max(1, p - 1))} disabled={logPage <= 1}
+                      className="px-3 py-1 text-xs rounded-lg bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 transition-colors">上一页</button>
+                    <span className="text-xs text-slate-500">{logPage} / {logData.pages}</span>
+                    <button onClick={() => setLogPage(p => Math.min(logData.pages, p + 1))} disabled={logPage >= logData.pages}
+                      className="px-3 py-1 text-xs rounded-lg bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 transition-colors">下一页</button>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -16,7 +16,15 @@ interface AuthStore {
 function loadAuth() {
   try {
     const saved = localStorage.getItem('aicodehub-auth');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const data = JSON.parse(saved);
+      // Purge old format (token without refreshToken) — force re-login
+      if (data.token && !data.refreshToken) {
+        localStorage.removeItem('aicodehub-auth');
+        return {};
+      }
+      return data;
+    }
   } catch {}
   return {};
 }
@@ -47,6 +55,10 @@ export const useAuthStore = create<AuthStore>((set) => {
       set({ username, avatar });
     },
     logout: () => {
+      const saved = loadAuth();
+      if (saved.token) {
+        fetch('/api/v1/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${saved.token}` } }).catch(() => {});
+      }
       localStorage.removeItem('aicodehub-auth');
       set({ token: null, refreshToken: null, role: null, username: null, avatar: null, isLoggedIn: false, isAdmin: false });
     },

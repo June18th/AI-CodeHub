@@ -39,7 +39,10 @@ public class ConversationService {
         Conversation c = new Conversation();
         c.setUserId(userId);
         c.setModel(model);
-        String cleaned = firstPrompt.replaceAll("\\s+", " ").trim();
+        String cleaned = firstPrompt
+            .replaceAll("[#*>_`~|]", "")
+            .replaceAll("\\s+", " ")
+            .trim();
         String title = cleaned.length() > 40 ? cleaned.substring(0, 40) + "..." : cleaned;
         c.setTitle(title);
         c.setSlug(java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 8));
