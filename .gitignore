@@ -39,7 +39,6 @@ logs/
 docs/CHANGELOG.md
 docs/PRODUCTION.md
 docs/ROADMAP.md
-docs/*.png
 docs/databases/
 docs/sample-docs/
 docs/scenarios/
