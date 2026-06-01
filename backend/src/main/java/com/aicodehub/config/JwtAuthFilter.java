@@ -63,8 +63,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         UserDetails userDetails = userDetailsService.loadUserById(userId);
         String role = (userDetails instanceof UserPrincipal p) ? p.getRole() : jwtUtil.getRole(token);
+        String orgTags = (userDetails instanceof UserPrincipal p) ? p.getOrgTags() : null;
         sessionService.extend(userId);
-        UserContext.set(userId, role);
+        UserContext.set(userId, role, orgTags);
 
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());

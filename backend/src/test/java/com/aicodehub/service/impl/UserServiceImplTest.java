@@ -23,6 +23,7 @@ class UserServiceImplTest {
     private UserMapper userMapper;
     private JwtUtil jwtUtil;
     private com.aicodehub.service.SessionService sessionService;
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
     private UserServiceImpl userService;
 
     @BeforeEach
@@ -30,7 +31,9 @@ class UserServiceImplTest {
         userMapper = mock(UserMapper.class);
         sessionService = mock(com.aicodehub.service.SessionService.class);
         jwtUtil = new JwtUtil("test-key-256-bits-minimum-32chars!", 900_000, 604_800_000);
-        userService = new UserServiceImpl(userMapper, jwtUtil, sessionService);
+        jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Integer.class), anyString())).thenReturn(0);
+        userService = new UserServiceImpl(userMapper, jwtUtil, sessionService, jdbc);
     }
 
     @Test

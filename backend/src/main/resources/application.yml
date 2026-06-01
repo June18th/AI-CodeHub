@@ -43,6 +43,8 @@ spring:
       cache-null-values: false
   kafka:
     bootstrap-servers: ${KAFKA_BROKER:kafka:9092}
+    listener:
+      auto-startup: false
     consumer:
       auto-offset-reset: earliest
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
@@ -93,7 +95,6 @@ logging:
   level:
     com.aicodehub: debug
     root: info
-    org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration: error
 
 jwt:
   secret: ${JWT_SECRET:ai-codehub-2026-jwt-secret-key-min-256-bits!!}

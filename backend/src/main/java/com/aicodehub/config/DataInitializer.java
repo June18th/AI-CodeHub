@@ -20,6 +20,13 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        // Init org tags (hierarchical)
+        Long defaultTag = seedOrgTag("DEFAULT", null);
+        Long adminTag   = seedOrgTag("ADMIN", null);
+        Long deptDev    = seedOrgTag("开发部", defaultTag);
+        Long deptOps    = seedOrgTag("运营部", defaultTag);
+        Long deptFin    = seedOrgTag("财务部", defaultTag);
+
         if (userMapper.selectCount(null) == 0) {
             User admin = new User();
             admin.setUsername("admin");
@@ -27,6 +34,8 @@ public class DataInitializer implements CommandLineRunner {
             admin.setPassword(encoder.encode("admin123"));
             admin.setRole("admin");
             admin.setStatus("active");
+            admin.setOrgTags("DEFAULT,ADMIN");
+            admin.setPrimaryOrg("ADMIN");
             userMapper.insert(admin);
             log.info("Default admin created: admin / admin123");
         }
@@ -62,6 +71,14 @@ public class DataInitializer implements CommandLineRunner {
         mapRole("user", "model:config");
         mapRole("user", "user:profile");
         mapRole("user", "conversation:access");
+    }
+
+    private Long seedOrgTag(String name, Long parentId) {
+        var ids = jdbc.queryForList(
+            "SELECT id FROM org_tag WHERE name = ?", Long.class, name);
+        if (!ids.isEmpty()) return ids.get(0);
+        jdbc.update("INSERT INTO org_tag (name, parent_id) VALUES (?, ?)", name, parentId);
+        return jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
     }
 
     private void seedPermission(String code, String name) {

@@ -53,6 +53,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
                 String.valueOf(user.getId()),
                 user.getPassword() != null ? user.getPassword() : "",
                 authorities,
-                user.getRole());
+                user.getRole(),
+                user.getOrgTags());
     }
 }

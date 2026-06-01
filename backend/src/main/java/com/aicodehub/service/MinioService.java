@@ -15,22 +15,19 @@ public class MinioService {
     private static final String BUCKET = "documents";
     private static final String IMAGES_BUCKET = "images";
 
-    public MinioService() {
-        String endpoint = System.getenv().getOrDefault("MINIO_URL", "http://minio:9000");
-        String user = System.getenv().getOrDefault("MINIO_USER", "minioadmin");
-        String pass = System.getenv().getOrDefault("MINIO_PASSWORD", "minioadmin123");
-        this.client = MinioClient.builder().endpoint(endpoint).credentials(user, pass).build();
+    public MinioService(MinioClient injectedClient) {
+        this.client = injectedClient;
         try {
+            String publicReadPolicy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::%s/*\"]}]}";
             for (String b : new String[]{BUCKET, IMAGES_BUCKET}) {
-                if (!client.bucketExists(BucketExistsArgs.builder().bucket(b).build())) {
+                boolean existed = client.bucketExists(BucketExistsArgs.builder().bucket(b).build());
+                if (!existed) {
                     client.makeBucket(MakeBucketArgs.builder().bucket(b).build());
-                    // Set public read policy for images bucket
-                    if (IMAGES_BUCKET.equals(b)) {
-                        String policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::" + b + "/*\"]}]}";
-                        client.setBucketPolicy(io.minio.SetBucketPolicyArgs.builder().bucket(b).config(policy).build());
-                    }
-                    log.info("MinIO bucket {} created", b);
                 }
+                // Ensure public read policy on both buckets
+                client.setBucketPolicy(io.minio.SetBucketPolicyArgs.builder()
+                    .bucket(b).config(String.format(publicReadPolicy, b)).build());
+                log.info("MinIO bucket {} ready (public read)", b);
             }
         } catch (Exception e) {
             log.error("MinIO init failed: {}", e.getMessage());
@@ -68,6 +65,18 @@ public class MinioService {
     }
 
     /** Return a public URL for the object via nginx proxy */
+    /** Download MinIO object as UTF-8 string */
+    public String downloadAsString(String objectName) {
+        try {
+            var resp = client.getObject(GetObjectArgs.builder()
+                .bucket(BUCKET).object(objectName).build());
+            return new String(resp.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            log.debug("MinIO download failed for {}: {}", objectName, e.getMessage());
+            return null;
+        }
+    }
+
     public String getPublicUrl(String objectName) {
         return "/minio/" + BUCKET + "/" + objectName;
     }

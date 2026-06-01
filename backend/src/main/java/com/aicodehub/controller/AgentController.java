@@ -2,6 +2,7 @@ package com.aicodehub.controller;
 
 import com.aicodehub.common.SseEmitterHelper;
 import com.aicodehub.common.SseSaveWrapper;
+import com.aicodehub.config.PromptConfig;
 import com.aicodehub.entity.Message;
 import com.aicodehub.service.ConversationService;
 import com.aicodehub.service.tool.FunctionCallHandler;
@@ -18,13 +19,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class AgentController {
 
-    private static final String SYSTEM_GUARD = """
-        你是 AI-CodeHub 智能助手，可以使用工具完成任务。请遵守以下规则：
-        1. 如果不确定该怎么做，直接询问用户，不要猜测或编造答案
-        2. 每次工具调用前先思考：这个工具是否真的必要？是否有更直接的方式？
-        3. 工具返回错误时，分析原因并尝试替代方案，不要重复相同的失败调用
-        4. 完成用户任务后，用简洁的中文总结结果""";
-
+    private final PromptConfig promptConfig;
     private final FunctionCallHandler functionCallHandler;
     private final ConversationService conversationService;
     private final com.aicodehub.service.AuditService auditService;
@@ -49,7 +44,9 @@ public class AgentController {
         SseSaveWrapper wrapper = new SseSaveWrapper(emitter);
 
         List<Map<String, String>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", SYSTEM_GUARD));
+        String systemPrompt = promptConfig.get("agent")
+            .replace("{AGENT_BUDGET_STATUS}", "等待首次调用...");
+        messages.add(Map.of("role", "system", "content", systemPrompt));
 
         if (conversationId != null) {
             conversationService.saveMessage(conversationId, "user", prompt);

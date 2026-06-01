@@ -14,7 +14,9 @@ public class User {
     private String password;
     private String avatar;
     private String refreshToken;
-    private String role;    // admin / beta / user / applicant
+    private String orgTags;     // comma-separated tag names: "DEFAULT,PRIVATE_alice,研发部"
+    private String primaryOrg;  // primary org tag name: "PRIVATE_alice"
+    private String role;    // admin / user / test / applicant
     private String status;  // pending / active / rejected
     private String applyReason;
     private Long reviewedBy;

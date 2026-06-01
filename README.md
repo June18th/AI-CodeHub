@@ -1,6 +1,16 @@
 # AI-CodeHub
 
-全栈 AI 智能平台，支持多模型流式对话、Agent 工具调用、RAG 检索增强、可视化工作流编排。前端 React + TypeScript + Tailwind CSS，后端 Spring Boot 3 + MyBatis-Plus，Docker Compose 一键部署。
+企业级 AI 协作平台，提供**知识库管理、智能对话、可视化工作流**三大核心功能。前端 React + TypeScript + Tailwind CSS，后端 Spring Boot 3 + MyBatis-Plus，Docker Compose 一键部署。
+
+## 核心功能
+
+| 功能 | 说明 | 页面入口 |
+|------|------|------|
+| **知识库** | 文档上传 + 三级权限隔离（私有/部门/公开）+ RAG 检索 + 来源标注 | `/rag` |
+| **智能对话** | 多模型流式对话 + Agent 工具调用（11 个内置工具）+ 记忆系统 + ReAct 决策循环 | `/` |
+| **工作流** | React Flow 可视化 DAG 编排 + LLM/Agent/工具/条件六种节点 + 并行执行 | `/copilot/workflow` |
+
+## 使用场景
 
 ## 技术栈
 
@@ -15,66 +25,73 @@
 | 数据库 | MySQL | 8.0 |
 | 缓存 | Redis | 7 |
 | 搜索引擎 | Elasticsearch | 8.13 |
-| 消息队列 | Kafka (KRaft) | 3.6 |
 | 对象存储 | MinIO | latest |
 | 向量模型 | 千问 text-embedding-v4 | 2048维 |
 | 鉴权 | Spring Security RBAC + JWT + BCrypt | - |
 | 容器化 | Docker + Docker Compose | - |
 
+## 文档权限模型
+
+| 可见级别 | 可见范围 | 适用场景 |
+|---------|---------|---------|
+| PRIVATE | 仅上传者本人 | 个人笔记、草稿 |
+| DEPARTMENT | 同部门成员 | 部门周报、技术方案、内部流程 |
+| PUBLIC | 全公司（含管理员） | 公司制度、公告、通用规范 |
+
+管理员拥有所有文档的全局可见权限。
+
+```
+ES 检索过滤:
+  Admin       → 无过滤，可见全部文档
+  PUBLIC      → 所有人可见
+  DEPARTMENT  → 仅同 org_tag 成员（支持层级穿透）
+  PRIVATE     → 仅上传者本人
+```
+
+## 组织架构
+
+支持自定义部门层级（默认内置开发部/运营部/财务部作为示例），管理员可灵活扩展。组织标签支持父子层级穿透，成员可归属多个标签。
+
 ## 项目结构
 
 ```
 AI-CodeHub/
-├── docker-compose.yml              # 7 服务编排（MySQL/Redis/ES/Kafka/MinIO/Backend/Frontend）
+├── docker-compose.yml              # 12 服务编排
 ├── .env                            # 环境变量
 ├── README.md
-├── docs/                           # 文档
+├── docs/
 │   ├── databases/init.sql          # 完整建表语句
-│   └── nginx.conf                  # Nginx 配置备份
-├── db/
-│   └── init.sql                    # 数据库初始化
+│   ├── README.md                   # 平台场景总览 + 权限矩阵
+│   ├── scenarios/customer-service/ # 场景文档
+│   │   └── KNOWLEDGE_STRUCTURE.md  # 知识库文档结构建议
+│   ├── CHANGELOG.md                # 完整更新日志
+│   ├── ROADMAP.md                  # 升级改造路线
+│   └── PRODUCTION.md               # 生产环境清单
 ├── backend/
 │   ├── Dockerfile
 │   ├── pom.xml
-│   └── src/main/
-│       ├── java/com/aicodehub/
-│       │   ├── AiCodeHubApplication.java
-│       │   ├── controller/         # Chat / Agent / Workflow / Admin / Documents / ModelConfig
-│       │   ├── service/
-│       │   │   ├── strategy/       # 多模型策略 (GPT/DeepSeek/千问/智谱/OpenAI)
-│       │   │   ├── tool/           # Agent 工具 (天气/计算器/日期/文件系统/RAG检索)
-│       │   │   ├── workflow/       # Workflow 引擎 (DAG调度+并行执行)
-│       │   │   ├── rag/            # RAG 服务 (Embedding + ES向量检索)
-│       │   │   └── factory/        # 模型工厂
-│       │   ├── common/             # 统一响应、SSE、JWT、DTO
-│       │   └── config/             # Security / Redis / Kafka / MyBatis-Plus
-│       └── resources/
-│           └── application.yml
+│   └── src/main/java/com/aicodehub/
+│       ├── controller/             # Chat / Agent / Workflow / Admin / Documents
+│       ├── service/
+│       │   ├── agent/              # ReAct 循环 + AgentBudget + CrewAI 多Agent
+│       │   ├── tool/builtin/       # 11 个 Agent 工具（含知识库检索/摘要/反馈/统计/MCP）
+│       │   ├── rag/                # RAG（Embedding + ES 检索 + Kafka 消费）
+│       │   ├── ChunkedUploadService # 分片上传 + Redis bitmap + MinIO composeObject
+│       │   └── ...
+│       ├── entity/                 # User / OrgTag / Document / FileUpload / Permission...
+│       ├── common/                 # 统一响应、SSE、WebSocket、JWT、UserContext
+│       └── config/                 # Security / RBAC / JwtAuthFilter / PromptConfig / MinioConfig / KafkaConfig
+│   └── resources/
+│       ├── application.yml
+│       └── prompts/                # 系统提示词（assistant / knowledge / workflow / agent）
 └── frontend/
-    ├── Dockerfile                  # 多阶段构建
-    ├── nginx.conf                  # Nginx 配置
-    ├── vite.config.ts
-    ├── tailwind.config.js
+    ├── Dockerfile
+    ├── nginx.conf
     └── src/
-        ├── App.tsx                 # 路由入口
-        ├── pages/
-        │   ├── ChatInterface.tsx   # 对话主界面
-        │   ├── CopilotOverview.tsx # Copilot 工作台概览
-        │   ├── CopilotWorkspace.tsx# 工作流编辑器
-        │   ├── AdminPanel.tsx      # 运营管理
-        │   ├── RagPanel.tsx        # 知识库管理
-        │   └── ModelConfigPage.tsx # 模型配置管理
-        ├── components/
-        │   ├── Sidebar.tsx         # 侧边栏（对话管理+用户信息）
-        │   ├── FlowCanvas.tsx      # React Flow 画布
-        │   ├── NodePanel.tsx       # 节点库
-        │   ├── ModelSelector.tsx   # 模型选择器
-        │   ├── LoginModal.tsx      # 登录/注册弹窗
-        │   ├── ProfileModal.tsx    # 用户资料编辑
-        │   └── Icons.tsx           # SVG 图标组件
+        ├── pages/                  # ChatInterface / CopilotOverview / RagPanel / AdminPanel
+        ├── components/             # Sidebar / FlowCanvas / ModelSelector / LoginModal
         ├── store/                  # Zustand 状态管理
-        ├── hooks/                  # useChatStream 等
-        └── utils/                  # 工具函数
+        └── hooks/                  # useWebSocket 等
 ```
 
 ## 本地开发
@@ -82,7 +99,7 @@ AI-CodeHub/
 ### 1. 环境要求
 
 - Docker Desktop
-- 复制 `.env.example` 为 `.env`，填写 API Key（DeepSeek / 千问必填）
+- 复制 `.env.example` 为 `.env`，填写所需模型的 API Key
 
 ### 2. 端口
 
@@ -93,13 +110,12 @@ AI-CodeHub/
 | 3306 | MySQL |
 | 6379 | Redis |
 | 9200 | Elasticsearch |
-| 9092 | Kafka |
 | 9000 | MinIO API |
 | 9001 | MinIO 控制台 |
 
-端口冲突时修改 `.env` 中对应变量即可。
-
 ### 3. 启动
+
+Docker Compose 一键部署，从 `docker compose up -d` 到可用只需一条命令。
 
 ```bash
 cd AI-CodeHub
@@ -119,129 +135,43 @@ docker compose up -d --build
 | 管理后台 | http://localhost:3000/admin |
 | MinIO 控制台 | http://localhost:9001 |
 
-### 4. 停止
+### 5. 停止
 
 ```bash
 docker compose down
 ```
 
-## 核心功能
+## 功能详情
 
-### 1. 多模型流式对话
+### 知识库
+- 文档上传支持三级可见性：PRIVATE / DEPARTMENT / PUBLIC
+- 千问 text-embedding-v4 向量化 → ES kNN+BM25 混合检索
+- 组织标签层级穿透，ES 检索按权限自动过滤
+- 上传支持 Markdown/TXT，手动粘贴或文件拖拽 + MinIO 对象存储
 
-- 5 个模型策略：GPT / 智谱 / 千问 / DeepSeek / OpenAI 兼容
-- SSE 流式输出，Nginx `proxy_buffering off` 保证逐字显示
-- Markdown 渲染（标题/列表/表格/代码块/加粗）
-- Token 统计（输入/输出），持久化存储
+<img src="docs/knowledge-base-design.png" alt="知识库管理" width="720"/>
 
-### 2. Agent 工具调用
+### 智能对话
+- WebSocket 全双工流式输出，打字机效果 + Markdown 渲染
+- Agent ReAct 决策循环：`while(true)` 最大 5 轮迭代 + 16000 token 预算
+- 内置 11 个工具：rag_search / summarize / knowledge_stats / web_search / calculator / datetime / weather / mcp / save_memory / search_memory / save_feedback
+- 多模型支持：GPT / 智谱 / 千问 / DeepSeek / OpenAI 兼容
+- 记忆系统：三层架构 + Map-Reduce 压缩 + ES 向量语义检索
 
-内置 6 个工具，Agent 模式下 AI 自主选择调用：
+<img src="docs/chat.png" alt="智能对话" width="720"/>
 
-| 工具 | 功能 |
-|------|------|
-| `calculator` | 数学表达式计算 |
-| `datetime` | 日期时间查询 |
-| `get_weather` | 高德地图实时天气 |
-| `filesystem` | 本地文件读写（挂载 /workspace） |
-| `rag_search` | ES 向量语义检索 |
-| `rag_search` | 知识库文档检索 |
-
-### 3. RAG 检索增强
-
-- 文档上传 → Kafka 异步处理 → 千问 text-embedding-v4 向量化 → ES dense_vector 索引
-- kNN 余弦相似度检索，Agent 模式下自动调用
-- MinIO 存储大文件，支持拖拽上传
-
-### 4. 可视化工作流
-
+### 工作流
 - React Flow 画布，拖拽式 DAG 编排
 - 节点类型：输入/输出/LLM/Agent/工具/条件分支
-- 节点配置面板（输入输出参数、模型选择、提示词模板）
-- Kepler 拓扑排序 + 并行层执行 + SSE 流式输出
-- 调试面板：独立输入+日志区，与主输出分离
+- 拓扑排序 + 并行层执行 + SSE 流式输出
 
-### 5. 权限系统（Spring Security RBAC）
+<img src="docs/copilot-workspace.png" alt="Copilot 工作台" width="720"/>
 
-| 角色 | 权限 |
-|------|------|
-| admin | 全部功能 + 用户审核 + 运营监控 |
-| test | Agent + 知识库 + 工作流 + 模型配置 |
-| user | 知识库 + 工作流 + 模型配置（使用自有 Key） |
+### 运营监控（管理员）
+- Grafana + Prometheus + Loki 全栈可观测
+- Token 消耗分析（各阶段分布 + 分页明细）
+- 用户审核 + 调用日志审计 + 24h 趋势图
 
-注册后默认 user + pending 状态，管理员审核通过后激活。`@PreAuthorize` + JWT 无状态鉴权，权限种子启动时自动写入。
+<img src="docs/admin-panel.png" alt="管理后台" width="720"/>
 
-### 6. Agent 工具 + MCP 本地文件
-
-Agent 模式下可调用 6 个工具：计算器 / 日期时间 / 天气查询 / **文件系统**（`list_dir`/`read_file`）/ ES 向量检索 / 知识库文档检索。文件系统工具挂载 `/workspace`（即项目根目录），可通过 `/minio/` 代理访问对象存储。
-
-### 7. 运营监控
-
-- 今日调用量 / 活跃用户 / Token 消耗 / 平均延迟 / 错误率
-- 24h 调用趋势图 + 模型用量分布
-- 最近调用日志表
-
-## 配置管理
-
-### 模型配置管理
-- `/model-config` 页面，CRUD + 设为默认
-- `model_config` 表存储供应商/API地址/密钥/模型/温度/能力标签
-- 工作流 LLM 节点可选择已存配置或手动输入
-
-## 项目截图
-
-### 对话界面
-多模型流式对话 · Agent 工具调用 · Markdown 渲染 · Token 统计
-
-![chat](docs/chat.png)
-
-### Copilot 工作台
-Agent 核心能力总览 · 快速入口 · 工作流编辑器 · 任务中心
-
-![copilot](docs/copilot-workspace.png)
-
-### 运营管理平台
-调用量/Token 消耗/延迟/错误率监控 · 24h 趋势图 · 用户审核 · 日志监控 · Token 分析
-
-![admin](docs/admin-panel.png)
-
-### 知识库设计
-文档上传 · 向量化 · ES 语义检索 · RAG 增强
-
-![knowledge-base](docs/knowledge-base-design.png)
-
-## Nginx 配置
-
-```nginx
-# SPA fallback
-location / { try_files $uri $uri/ /index.html; }
-
-# API 代理（SSE 无缓冲）
-location /api/ {
-    proxy_pass http://backend:8080/api/;
-    proxy_buffering off;
-    proxy_read_timeout 180s;
-}
-
-# MinIO 对象存储代理
-location ^~ /minio/ {
-    proxy_pass http://minio:9000/;
-}
-```
-
-## 能力总览
-
-AI-CodeHub 是一套完整的 AI 应用平台，覆盖从基础设施到业务体验的完整链路：
-
-- **对话层**：WebSocket 全双工流式对话，支持 5 个模型供应商，Markdown 渲染 + Token 统计
-- **Agent 层**：ReAct 决策循环 + 12 个内置工具 + CrewAI 多 Agent 协作 + 后台任务异步执行
-- **知识层**：RAG 检索增强（千问 Embedding + ES 混合检索）+ 三层记忆系统（短期/长期/外部）
-- **工作流层**：React Flow 可视化 DAG 编排 + 拓扑排序 + 并行节点执行
-- **运营层**：Grafana + Prometheus + Loki 全栈监控 + Token 分析 + 调用日志分页审计
-- **安全层**：HTTPS + Spring Security RBAC + JWT 双令牌 + Redis 滑动会话 + Bucket4j 限流 + 熔断
-- **数据层**：MySQL + Redis + ES + Kafka + MinIO，9 个复合索引 + Redis 缓存 + 企业级缓存一致性
-- **测试层**：JUnit 5 + Mockito 单元测试（27 个用例），持久化测试容器，全量 < 11 秒
-
-Docker Compose 一键部署，从 `docker compose up -d` 到可用只需一条命令。
-
-详细更新记录见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)，规划路线见 [`docs/ROADMAP.md`](docs/ROADMAP.md)，生产升级清单见 [`docs/PRODUCTION.md`](docs/PRODUCTION.md)。
+详细说明见 [`docs/README.md`](docs/README.md)，知识库结构见 [`docs/scenarios/customer-service/`](docs/scenarios/customer-service/)，更新记录见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)，路线规划见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。

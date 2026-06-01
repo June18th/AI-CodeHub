@@ -5,13 +5,12 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("document_chunk")
-public class DocumentChunk {
+@TableName("org_tag")
+public class OrgTag {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private Long documentId;
-    private Integer chunkIndex;
-    private String content;
+    private String name;
+    private Long parentId;
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime createdAt;
 }

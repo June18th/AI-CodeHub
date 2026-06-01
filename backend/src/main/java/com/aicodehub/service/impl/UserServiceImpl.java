@@ -23,6 +23,7 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
     private final com.aicodehub.service.SessionService sessionService;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
     @Override
@@ -53,12 +54,21 @@ public class UserServiceImpl implements UserService {
         if (userMapper.exists(new LambdaQueryWrapper<User>().eq(User::getEmail, req.getEmail()))) {
             throw new IllegalArgumentException("邮箱已被注册");
         }
+        // Create private org tag for this user
+        String privateTag = "PRIVATE_" + req.getUsername();
+        int cnt = jdbc.queryForObject("SELECT COUNT(*) FROM org_tag WHERE name = ?", Integer.class, privateTag);
+        if (cnt == 0) {
+            jdbc.update("INSERT INTO org_tag (name, parent_id) VALUES (?, (SELECT id FROM org_tag WHERE name = 'DEFAULT'))", privateTag);
+        }
+
         User user = new User();
         user.setUsername(req.getUsername());
         user.setEmail(req.getEmail());
         user.setPassword(encoder.encode(req.getPassword()));
         user.setRole("user");
         user.setStatus("pending");
+        user.setOrgTags("DEFAULT," + privateTag);
+        user.setPrimaryOrg(privateTag);
         user.setApplyReason(req.getApplyReason());
         userMapper.insert(user);
     }

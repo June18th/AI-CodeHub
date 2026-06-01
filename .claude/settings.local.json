@@ -13,7 +13,20 @@
       "Bash(docker exec *)",
       "Bash(docker exec aicodehub-test sh -c 'echo '\\\\''#!/bin/sh *)",
       "Bash(chmod +x /app/run-tests.sh)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Bash(mvn test *)",
+      "Bash(git -C \"F:/AI-CodeHub\" ls-files --error-unmatch \"backend;D\")",
+      "Bash(git -C \"F:/AI-CodeHub\" status -- \"backend;D\")",
+      "Bash(curl -k -s -o /dev/null -w \"%{http_code}\" \"https://localhost:3001/api/v1/auth/login\" -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(curl *)",
+      "WebSearch",
+      "Bash(npm install *)",
+      "Bash(npx vite *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(f'{i[\\\\\"filename\\\\\"]} status={i[\\\\\"status\\\\\"]} tokens={i.get\\(\\\\\"embeddingTokens\\\\\",\\\\\"N/A\\\\\"\\)}'\\) for i in \\(d['data'] or []\\)]\")",
+      "Bash(python3 -c ' *)",
+      "Bash(npx tsc *)",
+      "Bash(docker volume *)",
+      "Bash(docker build *)"
     ]
   }
 }

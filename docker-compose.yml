@@ -52,6 +52,8 @@ services:
       discovery.type: single-node
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    extra_hosts:
+      - "elasticsearch:127.0.0.1"
     ports:
       - "${ES_PORT:-9200}:9200"
     volumes:
@@ -84,7 +86,6 @@ services:
   kafka:
     image: apache/kafka:latest
     container_name: aicodehub-kafka
-    hostname: kafka
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
@@ -94,7 +95,10 @@ services:
       KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     ports:
       - "${KAFKA_PORT:-9092}:9092"
     networks:
@@ -113,7 +117,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/workspace
-      - backend-logs:/app/logs
+      - ./logs:/app/logs
     environment:
       TZ: Asia/Shanghai
       SPRING_PROFILES_ACTIVE: docker
@@ -174,7 +178,7 @@ services:
       - "${FRONTEND_PORT:-3000}:443"
       - "3080:80"
     volumes:
-      - ./config/certs:/etc/nginx/certs:ro
+      - ./docker/config/certs:/etc/nginx/certs:ro
     depends_on:
       - backend
     networks:
@@ -191,7 +195,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}'
     volumes:
-      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     networks:
       - aicodehub-net
@@ -207,8 +211,8 @@ services:
     ports:
       - "${GRAFANA_PORT:-3100}:3000"
     volumes:
-      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./docker/config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - grafana-data:/var/lib/grafana
     networks:
       - aicodehub-net
@@ -224,7 +228,7 @@ services:
       TZ: Asia/Shanghai
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
-      - ./config/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./docker/config/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
     networks:
       - aicodehub-net
@@ -237,7 +241,7 @@ services:
       TZ: Asia/Shanghai
     command: -config.file=/etc/promtail/promtail-config.yml
     volumes:
-      - ./config/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - ./docker/config/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
       - backend-logs:/var/log/app:ro
     networks:
       - aicodehub-net

@@ -34,19 +34,22 @@ public class EmbeddingService {
         this.dim = dim;
     }
 
+    /** Result of a batch embedding call */
+    public record EmbeddingResult(float[][] vectors, int totalTokens) {}
+
     /**
      * Embed a single text, returns float array.
      */
     public float[] embed(String text) {
-        float[][] batch = embedBatch(List.of(text));
-        return (batch != null && batch.length > 0) ? batch[0] : null;
+        EmbeddingResult batch = embedBatch(List.of(text));
+        return (batch != null && batch.vectors().length > 0) ? batch.vectors()[0] : null;
     }
 
     /**
      * Batch embed multiple texts in a single API call.
      */
-    public float[][] embedBatch(List<String> texts) {
-        if (texts.isEmpty()) return new float[0][];
+    public EmbeddingResult embedBatch(List<String> texts) {
+        if (texts.isEmpty()) return new EmbeddingResult(new float[0][], 0);
         try {
             String body = mapper.writeValueAsString(Map.of(
                 "model", model,
@@ -71,6 +74,7 @@ public class EmbeddingService {
             JsonNode root = mapper.readTree(resp.body());
             JsonNode embeddings = root.path("output").path("embeddings");
             if (!embeddings.isArray()) return null;
+            int tokens = root.path("usage").path("total_tokens").asInt();
 
             float[][] results = new float[embeddings.size()][];
             for (int j = 0; j < embeddings.size(); j++) {
@@ -79,7 +83,7 @@ public class EmbeddingService {
                 for (int i = 0; i < vec.size(); i++) result[i] = vec.get(i).floatValue();
                 results[j] = result;
             }
-            return results;
+            return new EmbeddingResult(results, tokens);
         } catch (Exception e) {
             log.error("Batch embedding failed: {}", e.getMessage());
             return null;

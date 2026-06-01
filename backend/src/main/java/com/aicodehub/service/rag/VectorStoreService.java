@@ -121,10 +121,22 @@ public class VectorStoreService {
     }
 
     /** Bulk index chunks with pre-computed embeddings */
-    public void bulkIndexChunks(Long docId, List<String> chunks, String filename, Long userId) {
-        if (chunks.isEmpty()) return;
-        float[][] vecs = embeddingService.embedBatch(chunks);
-        if (vecs == null) return;
+    public int bulkIndexChunks(Long docId, List<String> chunks, String filename, Long userId) {
+        return bulkIndexChunks(docId, chunks, filename, userId, "PRIVATE", null, null);
+    }
+
+    public int bulkIndexChunks(Long docId, List<String> chunks, String filename, Long userId,
+                                 String visibility, Long departmentId) {
+        return bulkIndexChunks(docId, chunks, filename, userId, visibility, departmentId, null);
+    }
+
+    /** Bulk index chunks, returns embedding token count */
+    public int bulkIndexChunks(Long docId, List<String> chunks, String filename, Long userId,
+                                 String visibility, Long departmentId, String orgTag) {
+        if (chunks.isEmpty()) return 0;
+        var embedResult = embeddingService.embedBatch(chunks);
+        if (embedResult == null) return 0;
+        float[][] vecs = embedResult.vectors();
 
         StringBuilder bulk = new StringBuilder();
         for (int i = 0; i < chunks.size(); i++) {
@@ -135,6 +147,9 @@ public class VectorStoreService {
                 doc.put("content", chunks.get(i));
                 doc.put("filename", filename);
                 doc.put("user_id", userId);
+                doc.put("visibility", visibility != null ? visibility : "PRIVATE");
+                if (departmentId != null) doc.put("department_id", departmentId);
+                if (orgTag != null) doc.put("org_tag", orgTag);
                 ArrayNode arr = mapper.createArrayNode();
                 for (float v : vecs[i]) arr.add(v);
                 doc.set("embedding", arr);
@@ -158,6 +173,7 @@ public class VectorStoreService {
         } catch (Exception e) {
             log.error("ES bulk index failed: {}", e.getMessage());
         }
+        return embedResult.totalTokens();
     }
 
     /** Delete all chunks for a document */
@@ -211,7 +227,9 @@ public class VectorStoreService {
     }
 
     /** Hybrid search: kNN vector + BM25 keyword with RRF fusion */
-    public List<Map<String, Object>> search(Long userId, String query, int topK) {
+    /** Search with orgTag-based access control */
+    public List<Map<String, Object>> search(Long userId, Set<String> effectiveOrgTags,
+                                             String query, int topK, boolean skipFilter) {
         float[] qVec = embeddingService.embed(query);
         if (qVec == null) return List.of();
 
@@ -224,9 +242,44 @@ public class VectorStoreService {
             knn.set("query_vector", qArr);
             knn.put("k", topK);
             knn.put("num_candidates", Math.min(topK * 2, 50));
-            ObjectNode filter = mapper.createObjectNode();
-            filter.set("term", mapper.createObjectNode().put("user_id", userId));
-            knn.set("filter", filter);
+            if (!skipFilter) {
+                ObjectNode filter = mapper.createObjectNode();
+                ObjectNode should = mapper.createObjectNode();
+                ArrayNode clauses = mapper.createArrayNode();
+                // PUBLIC: visible to all
+                clauses.add(mapper.createObjectNode().set("term",
+                    mapper.createObjectNode().put("visibility", "PUBLIC")));
+                // PRIVATE: only owner
+                ObjectNode privateClause = mapper.createObjectNode();
+                ObjectNode boolPrivate = mapper.createObjectNode();
+                ArrayNode privateMust = mapper.createArrayNode();
+                privateMust.add(mapper.createObjectNode().set("term",
+                    mapper.createObjectNode().put("visibility", "PRIVATE")));
+                privateMust.add(mapper.createObjectNode().set("term",
+                    mapper.createObjectNode().put("user_id", userId)));
+                boolPrivate.set("must", privateMust);
+                privateClause.set("bool", boolPrivate);
+                clauses.add(privateClause);
+                // DEPARTMENT: doc's org_tag must be in user's effective org tags
+                if (effectiveOrgTags != null && !effectiveOrgTags.isEmpty()) {
+                    ObjectNode deptClause = mapper.createObjectNode();
+                    ObjectNode boolDept = mapper.createObjectNode();
+                    ArrayNode deptMust = mapper.createArrayNode();
+                    deptMust.add(mapper.createObjectNode().set("term",
+                        mapper.createObjectNode().put("visibility", "DEPARTMENT")));
+                    ArrayNode termsArr = mapper.createArrayNode();
+                    for (String t : effectiveOrgTags) termsArr.add(t);
+                    deptMust.add(mapper.createObjectNode().set("terms",
+                        mapper.createObjectNode().set("org_tag", termsArr)));
+                    boolDept.set("must", deptMust);
+                    deptClause.set("bool", boolDept);
+                    clauses.add(deptClause);
+                }
+                should.set("should", clauses);
+                should.put("minimum_should_match", 1);
+                filter.set("bool", should);
+                knn.set("filter", filter);
+            }
 
             ObjectNode bm25 = mapper.createObjectNode();
             ObjectNode match = mapper.createObjectNode();

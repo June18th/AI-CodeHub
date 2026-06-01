@@ -29,7 +29,17 @@ loki-data/
 maven-cache/
 
 # Certificates
-config/certs/
+docker/config/certs/
 
 # Logs
 *.log
+logs/
+
+# Docs — only README.md and nginx.conf are tracked
+docs/CHANGELOG.md
+docs/PRODUCTION.md
+docs/ROADMAP.md
+docs/*.png
+docs/databases/
+docs/sample-docs/
+docs/scenarios/
