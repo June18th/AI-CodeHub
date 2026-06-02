@@ -40,8 +40,9 @@ public class DocumentProcessingConsumer {
     /** Start consumer loop, retries every 30s if Kafka unavailable */
     @EventListener(ApplicationReadyEvent.class)
     @Scheduled(fixedDelay = 30_000)
-    public void ensureConsumerRunning() {
+    public synchronized void ensureConsumerRunning() {
         if (running) return;
+        running = true;
         new Thread(() -> {
             try {
                 var props = new Properties();
@@ -54,7 +55,6 @@ public class DocumentProcessingConsumer {
 
                 consumer = new KafkaConsumer<>(props);
                 consumer.subscribe(List.of("document-ready"));
-                running = true;
                 log.info("Kafka consumer started, subscribed to document-ready");
 
                 while (running) {

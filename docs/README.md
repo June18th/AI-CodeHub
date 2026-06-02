@@ -41,7 +41,18 @@ ADMIN 和 TEST 角色可查看所有文档（鉴权过滤跳过）。
   └─ ES doc_chunks 索引 (kNN+BM25 混合检索)
 ```
 
+文本输入同样走异步管道：`POST /api/v1/documents` → MinIO 保存 → Kafka → 消费者处理。
+
 ### RAG 检索
+```
+用户提问 → ES kNN+BM25 混合检索（RRF 融合）
+   ├── ADMIN/TEST → 无过滤 (可见全部)
+   ├── PUBLIC → 所有人可见
+   ├── DEPARTMENT → 同 org_tag 及父级标签
+   └── PRIVATE → 仅上传者
+   ↓
+LLM 生成回答 + 📎 来源标注
+```
 
 ## 系统提示词
 
